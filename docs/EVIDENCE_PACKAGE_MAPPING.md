@@ -2,14 +2,14 @@
 
 작성일: 2026-08-04 (v3 반영: 2026-08-04)
 
-> **기준**: `canonical-ai4i-physics-v3.0` result_artifact.jsonl → azure-pdm Evidence Package  
+> **기준**: `canonical-ai4i-physics-v3.1` result_artifact.jsonl → Evidence Package  
 > 어댑터 구현: `scripts/load_v3_result_artifacts.py`
 
 ---
 
-## v3 Result Artifact → azure-pdm Evidence Package 필드 매핑 (구현 완료)
+## v3 Result Artifact → Evidence Package 필드 매핑 (구현 완료)
 
-| v3 result_artifact 필드 | azure-pdm Evidence Package 필드 | 변환 |
+| v3 result_artifact 필드 | Evidence Package 필드 | 변환 |
 |------------------------|--------------------------------|------|
 | `artifact_id` | `lineage.evidence_id` | 직접 복사 |
 | `asset_id` | `asset_id` | 직접 복사 |
@@ -35,7 +35,7 @@
 
 ---
 
-## azure-pdm Evidence Package 출력 구조
+## Evidence Package 출력 구조
 
 `generate_evidence_package()` + `add_model_prediction()` 합산 출력:
 
@@ -158,7 +158,7 @@ lineage
 
 ### 공통 식별자
 
-| azure-pdm 필드 | 프로토타입 필드 | 비고 |
+| Evidence Package 필드 | 프로토타입 필드 | 비고 |
 |----------------|----------------|------|
 | `machine_id` | `equipment.equipment_id` | 타입 int → str 변환 필요 |
 | `timestamp` | `observation.timestamp` | |
@@ -169,14 +169,14 @@ lineage
 
 ### 장비 정보
 
-| azure-pdm 필드 | 프로토타입 필드 | 비고 |
+| Evidence Package 필드 | 프로토타입 필드 | 비고 |
 |----------------|----------------|------|
 | machines.csv lookup | `equipment.model_code` | Evidence Package에 미포함 → 별도 lookup |
 | machines.csv lookup | `equipment.age_years` | 동일 |
 
 ### 센서 관측
 
-| azure-pdm 필드 | 프로토타입 필드 | 비고 |
+| Evidence Package 필드 | 프로토타입 필드 | 비고 |
 |----------------|----------------|------|
 | `sensor_evidence.sensors.{s}.mean_24h` | `observation.sensors[].mean_value` | |
 | `sensor_evidence.sensors.{s}.z_score` | `observation.sensors[].z_score` | |
@@ -187,7 +187,7 @@ lineage
 
 ### 이상 후보 (component_hypotheses → top_factors)
 
-| azure-pdm 필드 | 프로토타입 필드 | 비고 |
+| Evidence Package 필드 | 프로토타입 필드 | 비고 |
 |----------------|----------------|------|
 | `component_hypotheses[].component` | `top_factors[].component` | |
 | `component_hypotheses[].associated_sensor` | `top_factors[].sensor_id` | |
@@ -198,7 +198,7 @@ lineage
 
 ### 에러/이력
 
-| azure-pdm 필드 | 프로토타입 필드 | 비고 |
+| Evidence Package 필드 | 프로토타입 필드 | 비고 |
 |----------------|----------------|------|
 | `error_context.errors[].errorID` | `history[].detail` | type="error" |
 | `error_context.errors[].datetime` | `history[].datetime` | |
@@ -206,7 +206,7 @@ lineage
 
 ### 정비 이력
 
-| azure-pdm 필드 | 프로토타입 필드 | 비고 |
+| Evidence Package 필드 | 프로토타입 필드 | 비고 |
 |----------------|----------------|------|
 | `maintenance_context.compX.last_replacement` | `maintenance_context.compX.last_replaced` | 필드명 차이 |
 | `maintenance_context.compX.days_elapsed` | `maintenance_context.compX.days_since_replaced` | 필드명 차이 |
@@ -214,7 +214,7 @@ lineage
 
 ### 모델 판정
 
-| azure-pdm 필드 | 프로토타입 필드 | 비고 |
+| Evidence Package 필드 | 프로토타입 필드 | 비고 |
 |----------------|----------------|------|
 | `model_prediction.probability` | `failure_probability` | |
 | `model_prediction.threshold` | `threshold` | |
@@ -225,7 +225,7 @@ lineage
 
 ### 데이터 품질
 
-| azure-pdm 필드 | 프로토타입 필드 | 비고 |
+| Evidence Package 필드 | 프로토타입 필드 | 비고 |
 |----------------|----------------|------|
 | `status_flags.insufficient_data` | `data_quality_warnings[]` | bool → 경고 문자열 변환 |
 
@@ -250,7 +250,7 @@ lineage
 
 ## 필드명 불일치 요약
 
-| azure-pdm | 프로토타입 | 처리 방법 |
+| Evidence Package | 프로토타입 | 처리 방법 |
 |-----------|-----------|----------|
 | `last_replacement` | `last_replaced` | 변환 레이어 (adapter) |
 | `days_elapsed` | `days_since_replaced` | 변환 레이어 |

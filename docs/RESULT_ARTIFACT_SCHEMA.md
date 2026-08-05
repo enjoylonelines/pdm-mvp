@@ -2,7 +2,7 @@
 
 작성일: 2026-08-04 (v3 반영: 2026-08-04)
 
-> **기준 데이터셋**: `canonical-ai4i-physics-v3.0`  
+> **기준 데이터셋**: `canonical-ai4i-physics-v3.1`  
 > **핵심 입력**: `canonical/model_outputs/result_artifact.jsonl`  
 > v3 스키마 버전: `result-artifact-v1.0`
 

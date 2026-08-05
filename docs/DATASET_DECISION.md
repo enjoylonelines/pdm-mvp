@@ -1,18 +1,85 @@
-# Dataset Decision — Predictive Maintenance Canonical v3
+# Dataset Decision — Predictive Maintenance Canonical v3.1
 
-Date: 2026-08-04
+- Date: 2026-08-04 (v3.0) · **2026-08-05 갱신 (v3.1)**
+- 결정 로그: `final/docs/decisions.md` **020** — 004(Azure PdM)를 대체
 
 ## Decision
 
-The fixed dataset for W1 and team sharing is:
+기준 데이터셋 버전:
 
-`/Users/hb/Downloads/predictive_maintenance_canonical_v3`
+```
+canonical-ai4i-physics-v3.1
+model       independent-logreg-v3.1
+experiment  relation-reasoning-agent-eval-v3.1
+period      2026-08-01 ~ 2026-08-31 (KST) · seed 42 · profile balanced_demo
+```
 
-Dataset version:
+경로는 환경변수로 받는다. 절대 경로를 문서·코드에 넣지 않는다.
 
-`canonical-ai4i-physics-v3.0`
+```bash
+export PDM_CANONICAL_PATH=~/Downloads/predictive_maintenance_canonical_v3.1
+```
 
-This replaces the earlier review targets, including `predictive_maintenance_canonical_v2 2` and the prior fourth-review folder, as the team baseline.
+**배포 기준본은 `predictive_maintenance_canonical_v3.1/` 폴더와 내부 `dist/` ZIP이다.**
+같은 이름의 `_v3/` 폴더는 과거 작업 경로가 섞여 있어 기준본으로 보지 않는다.
+
+이 결정은 이전 검토 대상(`predictive_maintenance_canonical_v2 2`, 4차 리뷰 폴더)과
+Azure PdM(결정 004)을 모두 대체한다.
+
+## v3.0 → v3.1 변경
+
+두 차례 팀 리뷰에서 확인된 공구 마모 상태 전이·검증·에이전트 증거·문서 정합성
+문제를 수정한 배포 기준본이다. AI4I 물리 계약과 Result Artifact 구조는 유지된다.
+
+| 항목 | 내용 |
+|---|---|
+| 공구 마모 초기화 시점 | 교체를 결정한 `running` 행은 기존 wear 유지. 초기화는 `maintenance_event.started_at`과 같은 tick에서만 |
+| Tool wear continuity gate | `running → running` reset 0건, 모든 reset이 `tool_replaced=1` 이벤트와 정렬 |
+| Agent evidence | `evidence_observations[]`가 `sensor` · `maintenance` 두 유형 지원. 잘못된 maintenance ID는 점수 0 |
+| 문서 정합성 | RPM 생성식(0.30 inverse-power blend), PWF low-power 분기 순서 명시 |
+
+## 구조 (measured)
+
+| 항목 | 수 |
+|---|---:|
+| Assets (압축기 20 + CNC 80) | 100 |
+| Relations `SUPPLIES_AIR_TO` | 80 |
+| Sites / Cells | 4 / 20 |
+| Compressor observations | 86,400 |
+| CNC observations | 345,600 |
+| Production cycles | 170,875 |
+| Maintenance events | 790 |
+| — `failure_recovery` / `planned_tool_change` | 76 / 714 |
+| Prediction timeline | 68,208 |
+| Result Artifact | 100 |
+
+관측 스키마가 자산 유형마다 다르다.
+
+```
+CNC       air_temperature_k · process_temperature_k · rotational_speed_rpm
+          · torque_nm · tool_wear_min
+압축기     voltage_raw · rotation_raw · pressure_raw · vibration_raw
+          · relative_vibration_z · relative_vibration_zone
+```
+
+## Azure PdM(004) 대비 해소된 제약
+
+| | Azure PdM | canonical v3.1 |
+|---|---|---|
+| 설비 종류 | 미정의. 리포트에 설비명 표기 금지 | 압축기 · CNC 명시 |
+| 물리 단위 | 미정의. 상대값만 사용 | AI4I 물리 계약 준수 |
+| 자산 관계 | 없음 | `SUPPLIES_AIR_TO` 80건 |
+| 계층 | 없음 | site → cell → asset |
+| 정비 유형 | 24시간 창으로 역추정 | `maintenance_type` 필드 |
+| 정비의 원인 사건 | 없음 | `source_event_id` |
+| 공구 교체 | 알 수 없음 | `tool_replaced` 플래그 |
+| 생산 맥락 | 없음 | 제품별 사이클 170,875행 |
+
+## 유지되는 제약
+
+- **합성 데이터다.** 생성 규칙과 검증이 패키지 안에 있다는 점이 다를 뿐이다
+- **`causal_claim_allowed: no`** — `SUPPLIES_AIR_TO` 관계가 있어도 인과 주장은 금지한다.
+  결정 008(억제 규칙 폐기, 정보 제시로 전환)의 원칙을 유지한다
 
 ## Why This Dataset Is Fixed
 

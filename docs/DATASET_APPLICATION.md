@@ -8,8 +8,8 @@
 
 | 항목 | 값 |
 |------|---|
-| 데이터셋 이름 | `canonical-ai4i-physics-v3.0` |
-| 경로 | `/Users/hb/Downloads/predictive_maintenance_canonical_v3` |
+| 데이터셋 이름 | `canonical-ai4i-physics-v3.1` |
+| 경로 | `$PDM_CANONICAL_PATH` |
 | 핵심 입력 파일 | `canonical/model_outputs/result_artifact.jsonl` |
 | 레코드 수 | 100건 (compressor 20 / cnc 80) |
 | 모델 버전 | `independent-logreg-v3.0` |
@@ -81,7 +81,7 @@ recommended_action
   action                 str   "immediate_inspection_and_stop_review" 등
   priority               str   "urgent" | "medium" | "routine"
 provenance
-  dataset_version        str   "canonical-ai4i-physics-v3.0"
+  dataset_version        str   "canonical-ai4i-physics-v3.1"
   model_version          str   "independent-logreg-v3.0"
   prediction_id          str
   source_type            str
@@ -114,11 +114,11 @@ provenance
 
 ```
 === v3 데이터셋 검증 ===
-경로: /Users/hb/Downloads/predictive_maintenance_canonical_v3
-기준 버전: canonical-ai4i-physics-v3.0
+경로: $PDM_CANONICAL_PATH
+기준 버전: canonical-ai4i-physics-v3.1
 
 [PASS] v3 경로 존재
-[PASS] dataset_version == canonical-ai4i-physics-v3.0
+[PASS] dataset_version == canonical-ai4i-physics-v3.1
 [PASS] 파일 존재: canonical/dataset/asset_master.csv
 [PASS] 파일 존재: canonical/dataset/compressor_sensor_observation.csv
 [PASS] 파일 존재: canonical/dataset/cnc_sensor_observation.csv

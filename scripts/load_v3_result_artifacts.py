@@ -25,7 +25,7 @@ from typing import Optional
 import csv
 from datetime import datetime, timezone, timedelta
 
-DATASET_VERSION = "canonical-ai4i-physics-v3.0"
+DATASET_VERSION = "canonical-ai4i-physics-v3.1"
 MODEL_VERSION   = "independent-logreg-v3.0"
 WINDOW_HOURS    = 24
 
@@ -113,7 +113,7 @@ def _build_sensor_evidence_from_window(rows: list[dict]) -> dict:
             "basis": {
                 "window_rows_for_sensor": len(vals),
                 "relative_vibration_z": rel_z if s == "vibration_raw" else None,
-                "reference": "canonical-ai4i-physics-v3.0 compressor_sensor_observation",
+                "reference": "canonical-ai4i-physics-v3.1 compressor_sensor_observation",
             },
         }
 

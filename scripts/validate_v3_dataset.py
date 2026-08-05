@@ -3,7 +3,7 @@ v3 데이터셋 연결 검증 스크립트
 
 확인 항목:
   1. v3 경로 존재 여부
-  2. dataset_version 확인 (canonical-ai4i-physics-v3.0)
+  2. dataset_version 확인 (canonical-ai4i-physics-v3.1)
   3. 필수 파일 존재 여부
   4. result_artifact.jsonl 최소 1건 파싱 가능 여부
   5. evaluation_truth 미사용 원칙 (파일은 있어도 import/참조 금지 확인)
@@ -17,12 +17,20 @@ v3 데이터셋 연결 검증 스크립트
 from __future__ import annotations
 
 import json
+import os
 import sys
 import argparse
 from pathlib import Path
 
-DEFAULT_V3_PATH = Path("/Users/hb/Downloads/predictive_maintenance_canonical_v3")
-DATASET_VERSION = "canonical-ai4i-physics-v3.0"
+# 절대 경로를 코드에 넣지 않는다. 환경변수 > 기본값 순.
+# 기준본은 v3.1 이며, 같은 이름의 _v3/ 폴더는 과거 작업 경로가 섞여 있어 기준본이 아니다.
+DEFAULT_V3_PATH = Path(
+    os.environ.get(
+        "PDM_CANONICAL_PATH",
+        Path.home() / "Downloads" / "predictive_maintenance_canonical_v3.1",
+    )
+)
+DATASET_VERSION = "canonical-ai4i-physics-v3.1"
 
 REQUIRED_FILES = [
     "canonical/dataset/asset_master.csv",
@@ -147,7 +155,7 @@ def run_checks(v3_path: Path) -> bool:
             pass
     no_eval_ref = len(eval_refs) == 0
     all_pass &= check(
-        "evaluation_truth 미사용 (azure-pdm 소스 참조 없음)",
+        "evaluation_truth 미사용 (프로젝트 소스 참조 없음)",
         no_eval_ref,
         f"참조 파일: {eval_refs}" if eval_refs else "프로젝트 소스 파일에 evaluation_truth 참조 없음",
     )

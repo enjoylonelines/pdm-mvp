@@ -2,8 +2,8 @@
 
 작성일: 2026-08-04 (v3 데이터셋 반영: 2026-08-04)
 
-> **기준 데이터셋**: `canonical-ai4i-physics-v3.0`  
-> **경로**: `/Users/hb/Downloads/predictive_maintenance_canonical_v3`  
+> **기준 데이터셋**: `canonical-ai4i-physics-v3.1`  
+> **경로**: `$PDM_CANONICAL_PATH`  
 > **핵심 입력**: `canonical/model_outputs/result_artifact.jsonl` (100건)
 
 ---
@@ -22,7 +22,7 @@ LLM은 판단 주체가 아니라, Evidence Package를 역할별 문장으로 �
 
 ## 현재 구현 상태
 
-### 기준 데이터셋 — v3 (`canonical-ai4i-physics-v3.0`)
+### 기준 데이터셋 — v3 (`canonical-ai4i-physics-v3.1`)
 
 > W1 공식 데이터셋. Result Artifact 100건이 확정 출력.
 
@@ -52,13 +52,13 @@ LLM은 판단 주체가 아니라, Evidence Package를 역할별 문장으로 �
 
 ### v3 어댑터 (`scripts/load_v3_result_artifacts.py`)
 
-`result_artifact.jsonl` → azure-pdm Evidence Package 형태 변환 스크립트.
+`result_artifact.jsonl` → Evidence Package 형태 변환 스크립트.
 센서 창(compressor_sensor_observation.csv)과 정비 이력(maintenance_event.csv)을 선택적으로 조인한다.
 
 ```bash
 # critical 케이스 변환 → samples/ 저장
 python3 scripts/load_v3_result_artifacts.py \
-  --v3-path /Users/hb/Downloads/predictive_maintenance_canonical_v3 \
+  --v3-path $PDM_CANONICAL_PATH \
   --status critical warning --out samples/
 
 # 데이터셋 연결 검증
