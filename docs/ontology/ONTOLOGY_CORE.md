@@ -368,6 +368,17 @@ ObservationWindow에 포함되는 채널별 집계값. 별도 객체이거나 �
 | `interval_since_previous_days` | number \| null | 이전 정비와의 간격. 최초 기록이면 null |
 | `in_training_scope` | boolean | 학습 범위 포함 여부. 초기 기록 등 제외 대상은 false |
 
+**`type` 판정 규칙 — 관측 창의 경계**
+
+정비 직전 관측 창을 **`(performed_at − reactive_window_hours, performed_at]`** 로 정의한다.
+시작은 배제하고 **끝은 포함**한다.
+
+원본 시각의 해상도가 낮은 도메인에서는 고장과 그에 따른 교체가 같은 시각으로 기록된다.
+끝 경계를 배제하면 사후 정비를 전부 놓치고 모든 기록이 `preventive`로 판정된다.
+
+이 규칙은 `SamplingPolicy.reactive_window_hours`와 함께 판정을 완결한다.
+창의 길이는 정책이 정하고, 경계의 개폐는 이 규칙이 정한다.
+
 ---
 
 ## 1.5 판정 계층

@@ -74,7 +74,7 @@ JSONL을 쓰는 이유는 diff와 육안 검사가 쉽기 때문이다. SQLite �
 
 | 값 | 규칙 |
 |---|---|
-| `Component.last_replacement_type` | 교체 24시간 이내에 같은 설비·계통 고장이 있으면 `reactive`, 아니면 `preventive` |
+| `Component.last_replacement_type` | 관측 창 **`(교체시각 − 24h, 교체시각]`** 안에 같은 설비·계통 고장이 있으면 `reactive`, 아니면 `preventive`. **끝 경계를 포함해야 한다** — 원본 시각이 시간 단위로 반올림돼 고장과 그에 따른 교체가 같은 시각으로 기록된다. 배제하면 `reactive`가 0건이 된다 |
 | `Component.median_interval_days` | **계통 코드별** 교체 간격 중앙값. 설비별이 아니다 |
 | `Component.life_ratio` | `days_since_replacement / median_interval_days`. 기준 시각은 인자로 받는다 |
 | `Machine.reactive_ratio` | `reactive_count / (preventive_count + reactive_count)` |
@@ -107,6 +107,19 @@ JSONL을 쓰는 이유는 diff와 육안 검사가 쉽기 때문이다. SQLite �
 model3 35 · model4 32 · model2 17 · model1 16
 연식 범위 0 ~ 20
 ```
+
+### 정비 유형 분해 — 결정 004 measured
+
+```
+preventive 2,543 · reactive 743          합계 3,286
+
+유형별 다음 교체까지 중앙값
+  preventive 45일 (n=2,241) · reactive 30일 (n=645)
+
+maintenance_followed_failure 링크  743건 (reactive 건수와 일치)
+```
+
+**`reactive`가 0건으로 나오면 관측 창의 끝 경계를 배제한 것이다.** 판정 조건을 `(교체시각 − 24h, 교체시각]`으로 고칠 것.
 
 ### 계통별 교체 간격 중앙값 (일)
 

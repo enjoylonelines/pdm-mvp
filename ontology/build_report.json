@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-08-05T08:58:39.020248",
+  "generated_at": "2026-08-05T09:10:49.219071",
   "actual_stats": {
     "instance_counts": {
       "machine": 100,
@@ -26,6 +26,14 @@
     "age_range": {
       "min": 0,
       "max": 20
+    },
+    "maint_type_counts": {
+      "preventive": 2543,
+      "reactive": 743
+    },
+    "maint_type_median_intervals": {
+      "preventive": 45.0,
+      "reactive": 30.0
     },
     "comp_median_intervals": {
       "comp1": 45.0,

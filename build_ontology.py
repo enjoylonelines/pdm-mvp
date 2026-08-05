@@ -17,6 +17,8 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
+import maintenance_rules
+
 from display_names import COMP_DISPLAY, ERROR_DISPLAY
 from z_baseline import (
     SENSOR_COMP,
@@ -108,14 +110,9 @@ def classify_maintenance(
     failures: pd.DataFrame,
 ) -> pd.DataFrame:
     """
-    reactive: 교체 24시간 이내에 같은 설비·계통 고장 존재
-    preventive: 그 외
+    정비 유형 분류. 판정 규칙은 `maintenance_rules`가 단일 출처로 보유한다.
 
-    경계 조건: (mdt - 24h, mdt] — 시작 배제, 끝 **포함**.
-    원본 시각이 시간 단위로 반올림돼 있어 고장과 그에 따른 교체가
-    같은 시각에 기록된다. 끝 경계를 배제하면 사후 정비를 전부 놓친다.
-    `manager_app.compute_maint_interval_stats`와 동일한 규칙이며
-    결정 004의 measured 값(예방 2,543 / 사후 743)을 재현한다.
+    결정 004 measured: 예방 2,543 / 사후 743.
     """
     fail_lookup: dict[tuple, list] = {}
     for _, row in failures.iterrows():
@@ -129,12 +126,11 @@ def classify_maintenance(
         mid = int(row["machineID"])
         comp = str(row["comp"])
         mdt = row["datetime"]
-        window_start = mdt - pd.Timedelta(hours=24)
 
         fail_times = fail_lookup.get((mid, comp), [])
-        reactive = any(window_start < ft <= mdt for ft in fail_times)
+        reactive = maintenance_rules.is_reactive(mdt, fail_times)
 
-        types.append("reactive" if reactive else "preventive")
+        types.append(maintenance_rules.REACTIVE if reactive else maintenance_rules.PREVENTIVE)
         flags.append(reactive)
 
     result = maint.copy()
@@ -768,13 +764,13 @@ def build_links(
         mid = mr["machine_id"]
         comp = mr["comp_code"]
         mdt = pd.Timestamp(mr["performed_at"])
-        window_start = mdt - pd.Timedelta(hours=24)
+        # 관측 창은 maintenance_rules 가 단일 출처로 보유. classify_maintenance 와 동일
+        window_start, window_end = maintenance_rules.reactive_window(mdt)
 
-        # 경계 (mdt - 24h, mdt] — classify_maintenance 와 동일해야 한다
         candidates = [
             (dt, eid)
             for dt, eid in fail_by_comp.get((mid, comp), [])
-            if window_start < dt <= mdt
+            if window_start < dt <= window_end
         ]
         if candidates:
             latest_dt, latest_eid = max(candidates, key=lambda x: x[0])
@@ -938,6 +934,42 @@ EXPECTED = {
 }
 
 
+def _maint_type_counts(records: list[dict]) -> dict[str, int]:
+    """정비 유형별 건수. 결정 004 measured 대조용."""
+    out: dict[str, int] = {"preventive": 0, "reactive": 0}
+    for r in records:
+        t = r.get("type")
+        if t in out:
+            out[t] += 1
+    return out
+
+
+def _maint_type_median_intervals(records: list[dict]) -> dict[str, float | None]:
+    """
+    교체 유형별 '다음 교체까지' 경과일 중앙값.
+
+    계통별 중앙값(comp_median_intervals)과는 다른 축이다.
+    이쪽은 '어떤 유형으로 교체했을 때 다음 교체가 얼마나 빨리 오는가'를 본다.
+    결정 004 measured: 예방 45일 / 사후 30일.
+    """
+    seq: dict[tuple, list[tuple]] = {}
+    for r in records:
+        key = (r["machine_id"], r["comp_code"])
+        seq.setdefault(key, []).append((pd.Timestamp(r["performed_at"]), r.get("type")))
+
+    buckets: dict[str, list[float]] = {"preventive": [], "reactive": []}
+    for pairs in seq.values():
+        pairs.sort(key=lambda x: x[0])
+        for (d1, t1), (d2, _) in zip(pairs, pairs[1:]):
+            if t1 in buckets:
+                buckets[t1].append((d2 - d1).days)
+
+    return {
+        t: (float(pd.Series(v).median()) if v else None)
+        for t, v in buckets.items()
+    }
+
+
 def build_actual_stats(
     instances: dict[str, list[dict]],
     links: dict[str, list[dict]],
@@ -994,6 +1026,10 @@ def build_actual_stats(
             "min": min(m["age"] for m in machines),
             "max": max(m["age"] for m in machines),
         },
+        "maint_type_counts": _maint_type_counts(instances.get("maintenance_record", [])),
+        "maint_type_median_intervals": _maint_type_median_intervals(
+            instances.get("maintenance_record", [])
+        ),
         "comp_median_intervals": comp_medians,
         "comp_total_failures": comp_failures,
         "part_demand_total_2015": demand_total,
@@ -1039,6 +1075,25 @@ def verify_against_expected(actual: dict) -> list[str]:
     # 연식 범위
     chk("age_range.min", actual["age_range"]["min"], EXPECTED["age_range"]["min"])
     chk("age_range.max", actual["age_range"]["max"], EXPECTED["age_range"]["max"])
+
+    # 정비 유형 분해 (결정 004 measured)
+    for t, exp_val in EXPECTED["maint_type_counts"].items():
+        chk(f"maint_type_count.{t}", actual.get("maint_type_counts", {}).get(t), exp_val)
+
+    # 유형별 다음 교체까지 중앙값 (결정 004 measured)
+    for t, exp_val in EXPECTED["maint_type_median_intervals"].items():
+        chk(
+            f"maint_type_median_interval.{t}",
+            actual.get("maint_type_median_intervals", {}).get(t),
+            exp_val,
+        )
+
+    # 사후 정비 → 고장 링크. reactive 건수와 같아야 한다
+    chk(
+        "maintenance_followed_failure_links",
+        actual.get("link_counts", {}).get("maintenance_followed_failure"),
+        EXPECTED["maintenance_followed_failure_links"],
+    )
 
     # 계통별 교체 간격 중앙값
     for comp, exp_val in EXPECTED["comp_median_intervals"].items():

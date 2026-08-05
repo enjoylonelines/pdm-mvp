@@ -393,6 +393,30 @@ Azure PdM 데이터셋에는 FailureMode가 없으므로 이 객체는 사용하
 | `interval_since_previous_days` | 신규 | 이전 교체와의 간격 | 최초 기록이면 null |
 | `in_training_scope` | 신규 | 2014년 400건: `false` (type 판정 학습 제외). 경과일 계산에는 포함 | 기존 결정 유지 |
 
+**실측 (결정 004 measured 재현)**
+
+```
+preventive 2,543 / reactive 743                    합계 3,286
+유형별 다음 교체까지 중앙값   예방 45일 / 사후 30일
+maintenance_followed_failure 링크  743건 (reactive 건수와 일치)
+```
+
+**경계 조건** — 관측 창은 `(performed_at − 24h, performed_at]`. 끝을 포함한다.
+
+`PdM_*.csv`의 시각은 **시간 단위로 반올림**돼 있어(데이터 한계 4항목) 고장과 그에 따른 교체가 같은 시각으로 기록된다. 끝 경계를 배제하면 `reactive`가 **0건**이 되고 결정 004의 measured 값과 어긋난다.
+
+판정 규칙은 **`maintenance_rules.py`가 단일 출처**로 보유하며, 아래 호출부가 모두 이 모듈을 쓴다.
+
+| 파일 | 호출부 |
+|---|---|
+| `evidence_package.py` | `_build_maintenance_context()` |
+| `manager_app.py` | `compute_maint_interval_stats()` · `compute_equipment_maint_counts()` |
+| `build_ontology.py` | `classify_maintenance()` · `maintenance_followed_failure` 링크 생성 |
+
+`test_maintenance_rules.py`가 경계 조건과 결정 004 재현을 잠근다. 옛 경계로 되돌리면 사후 정비가 0건이 되는 것까지 회귀 테스트로 고정돼 있다.
+
+> 사후 정비 743건은 매니저 화면 ④번 질문("미루면 뭐가 나빠지는가")의 근거다. **사후 교체 후 다음 교체까지 30일, 예방 교체 후 45일**이라는 대비가 "지금 갈까 미룰까"에 답한다. `reactive`가 0이면 이 비교가 사라진다.
+
 ---
 
 ### 5.18 RiskEvent

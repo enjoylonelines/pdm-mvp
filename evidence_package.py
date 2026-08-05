@@ -11,6 +11,8 @@ import pandas as pd
 from pathlib import Path
 from typing import Union
 
+import maintenance_rules
+
 from z_baseline import (
     load_baseline, load_thresholds, baseline_to_dataframe,
     compute_z as _compute_z,
@@ -395,15 +397,11 @@ def _build_maintenance_context(
         last_maint_dt = comp_maint_before.iloc[-1]['datetime']
         days_elapsed = round((ts - last_maint_dt).total_seconds() / 86400, 1)
 
-        # reactive 판정: 해당 교체 전 24h 내 같은 장비의 failure 존재 여부
-        # (사후 정비 = 고장 직후 교체)
-        # 경계 (last_maint_dt - 24h, last_maint_dt] — 끝 포함.
-        # 원본 시각이 시간 단위로 반올림돼 고장과 교체가 같은 시각에 기록된다.
+        # reactive 판정 — 규칙은 maintenance_rules 가 단일 출처로 보유
         comp_fail = fail_m[fail_m['failure'] == comp]
-        reactive = not comp_fail[
-            (comp_fail['datetime'] > last_maint_dt - pd.Timedelta(hours=24)) &
-            (comp_fail['datetime'] <= last_maint_dt)
-        ].empty
+        reactive = maintenance_rules.is_reactive_series(
+            last_maint_dt, comp_fail['datetime']
+        )
 
         out[comp] = {
             'last_replacement': str(last_maint_dt),

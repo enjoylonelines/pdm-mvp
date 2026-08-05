@@ -20,6 +20,7 @@ import altair as alt
 ROOT = Path(__file__).parent
 sys.path.insert(0, str(ROOT))
 
+import maintenance_rules
 from evidence_package import load_data, compute_global_baseline, generate_evidence_package
 from report_generator import GRADE_ALARM, GRADE_WATCH, _all_candidates
 from z_baseline import load_baseline, load_thresholds, DEFAULT_BASELINE_PATH, DEFAULT_THRESHOLD_PATH
@@ -102,14 +103,12 @@ def compute_maint_interval_stats(_maint_df: pd.DataFrame, _fails_df: pd.DataFram
 
         for i in range(len(grp)):
             mdt = grp.iloc[i]['datetime']
-            if not comp_fails.empty:
-                is_reactive = bool(
-                    ((comp_fails > mdt - pd.Timedelta(hours=24)) & (comp_fails <= mdt)).any()
-                )
-            else:
-                is_reactive = False
-
-            mtype = 'reactive' if is_reactive else 'preventive'
+            # 판정 규칙은 maintenance_rules 가 단일 출처로 보유
+            mtype = (
+                maintenance_rules.REACTIVE
+                if maintenance_rules.is_reactive_series(mdt, comp_fails)
+                else maintenance_rules.PREVENTIVE
+            )
 
             if i + 1 < len(grp):
                 gap = (grp.iloc[i + 1]['datetime'] - mdt).days
@@ -151,9 +150,8 @@ def compute_equipment_maint_counts(_maint_df: pd.DataFrame, _fails_df: pd.DataFr
         p_cnt = r_cnt = 0
         for _, row in grp.iterrows():
             mdt = row['datetime']
-            is_reactive = (not comp_fails.empty) and bool(
-                ((comp_fails > mdt - pd.Timedelta(hours=24)) & (comp_fails <= mdt)).any()
-            )
+            # 판정 규칙은 maintenance_rules 가 단일 출처로 보유
+            is_reactive = maintenance_rules.is_reactive_series(mdt, comp_fails)
             if is_reactive:
                 r_cnt += 1
             else:
