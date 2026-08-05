@@ -1,0 +1,4 @@
+{"model_code": "model1", "machine_count": 16, "failure_rate_per_machine": 11.8, "mean_age": 12.2, "_source": {"model_code": "원본", "machine_count": "신규", "failure_rate_per_machine": "신규", "mean_age": "신규"}}
+{"model_code": "model2", "machine_count": 17, "failure_rate_per_machine": 9.9, "mean_age": 12.8, "_source": {"model_code": "원본", "machine_count": "신규", "failure_rate_per_machine": "신규", "mean_age": "신규"}}
+{"model_code": "model3", "machine_count": 35, "failure_rate_per_machine": 6.3, "mean_age": 12.0, "_source": {"model_code": "원본", "machine_count": "신규", "failure_rate_per_machine": "신규", "mean_age": "신규"}}
+{"model_code": "model4", "machine_count": 32, "failure_rate_per_machine": 5.7, "mean_age": 9.3, "_source": {"model_code": "원본", "machine_count": "신규", "failure_rate_per_machine": "신규", "mean_age": "신규"}}

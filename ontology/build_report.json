@@ -1,0 +1,129 @@
+{
+  "generated_at": "2026-08-05T08:58:39.020248",
+  "actual_stats": {
+    "instance_counts": {
+      "machine": 100,
+      "machine_model": 4,
+      "component": 400,
+      "component_class": 4,
+      "model_component_profile": 16,
+      "part_demand_profile": 4,
+      "sensor_channel": 4,
+      "peer_group": 56,
+      "error_type": 5,
+      "error_event": 3919,
+      "failure_event": 761,
+      "maintenance_record": 3286,
+      "baseline_profile": 1,
+      "threshold_policy": 1
+    },
+    "model_counts": {
+      "model3": 35,
+      "model4": 32,
+      "model2": 17,
+      "model1": 16
+    },
+    "age_range": {
+      "min": 0,
+      "max": 20
+    },
+    "comp_median_intervals": {
+      "comp1": 45.0,
+      "comp2": 30.0,
+      "comp3": 45.0,
+      "comp4": 45.0
+    },
+    "comp_total_failures": {
+      "comp1": 192,
+      "comp2": 259,
+      "comp3": 131,
+      "comp4": 179
+    },
+    "part_demand_total_2015": {
+      "comp1": 702,
+      "comp2": 761,
+      "comp3": 706,
+      "comp4": 710
+    },
+    "part_demand_monthly_mean": {
+      "comp1": 58.5,
+      "comp2": 63.4,
+      "comp3": 58.8,
+      "comp4": 59.2
+    },
+    "part_demand_monthly_peak": {
+      "comp1": 67,
+      "comp2": 76,
+      "comp3": 75,
+      "comp4": 71
+    },
+    "model_failure_rate": {
+      "model1": 11.8,
+      "model2": 9.9,
+      "model3": 6.3,
+      "model4": 5.7
+    },
+    "model_comp_failures_per_machine": {
+      "model1": {
+        "comp1": 2.1,
+        "comp2": 2.9,
+        "comp3": 4.2,
+        "comp4": 2.6
+      },
+      "model2": {
+        "comp1": 1.8,
+        "comp2": 2.4,
+        "comp3": 3.7,
+        "comp4": 2.0
+      },
+      "model3": {
+        "comp1": 1.9,
+        "comp2": 2.5,
+        "comp3": 0.0,
+        "comp4": 1.8
+      },
+      "model4": {
+        "comp1": 1.9,
+        "comp2": 2.6,
+        "comp3": 0.0,
+        "comp4": 1.2
+      }
+    },
+    "machine_failure_dist": {
+      "min": 2,
+      "median": 7.0,
+      "max": 19,
+      "zero_failure_count": 2,
+      "all_median": 7.0
+    },
+    "link_counts": {
+      "machine_has_model": 100,
+      "machine_has_component": 400,
+      "component_has_class": 400,
+      "model_component_profile_of_model": 16,
+      "model_component_profile_of_class": 16,
+      "component_class_has_demand_profile": 4,
+      "component_monitored_by": 400,
+      "machine_belongs_to_peer_group": 100,
+      "machine_had_error": 3919,
+      "error_event_has_type": 3919,
+      "error_type_associated_with_component": 5,
+      "component_had_failure": 761,
+      "component_had_maintenance": 3286,
+      "maintenance_followed_failure": 743
+    }
+  },
+  "integrity": {
+    "dangling_references": 0,
+    "dangling_details": [],
+    "duplicate_ids": 0,
+    "duplicate_details": [],
+    "component_monitored_by_violations": 0,
+    "passed": true
+  },
+  "verification": {
+    "issues": [],
+    "passed": true
+  },
+  "overall_passed": true
+}

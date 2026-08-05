@@ -1,0 +1,103 @@
+[
+  {
+    "type": "machine_has_model",
+    "from_type": "Machine",
+    "to_type": "MachineModel",
+    "cardinality": "many-to-one",
+    "source": "원본"
+  },
+  {
+    "type": "machine_has_component",
+    "from_type": "Machine",
+    "to_type": "Component",
+    "cardinality": "one-to-many",
+    "source": "신규"
+  },
+  {
+    "type": "component_has_class",
+    "from_type": "Component",
+    "to_type": "ComponentClass",
+    "cardinality": "many-to-one",
+    "source": "신규"
+  },
+  {
+    "type": "model_component_profile_of_model",
+    "from_type": "ModelComponentProfile",
+    "to_type": "MachineModel",
+    "cardinality": "many-to-one",
+    "source": "신규"
+  },
+  {
+    "type": "model_component_profile_of_class",
+    "from_type": "ModelComponentProfile",
+    "to_type": "ComponentClass",
+    "cardinality": "many-to-one",
+    "source": "신규"
+  },
+  {
+    "type": "component_class_has_demand_profile",
+    "from_type": "ComponentClass",
+    "to_type": "PartDemandProfile",
+    "cardinality": "one-to-one",
+    "source": "신규"
+  },
+  {
+    "type": "component_monitored_by",
+    "from_type": "Component",
+    "to_type": "SensorChannel",
+    "cardinality": "many-to-one",
+    "source": "계산",
+    "note": "설비당 계통 단위: 각 Component는 정확히 1개 SensorChannel에 연결"
+  },
+  {
+    "type": "machine_belongs_to_peer_group",
+    "from_type": "Machine",
+    "to_type": "PeerGroup",
+    "cardinality": "many-to-many",
+    "source": "계산"
+  },
+  {
+    "type": "machine_had_error",
+    "from_type": "Machine",
+    "to_type": "ErrorEvent",
+    "cardinality": "one-to-many",
+    "source": "원본"
+  },
+  {
+    "type": "error_event_has_type",
+    "from_type": "ErrorEvent",
+    "to_type": "ErrorType",
+    "cardinality": "many-to-one",
+    "source": "원본"
+  },
+  {
+    "type": "error_type_associated_with_component",
+    "from_type": "ErrorType",
+    "to_type": "ComponentClass",
+    "cardinality": "many-to-many",
+    "source": "계산",
+    "note": "설계 문서는 Component로 표기하나 연관은 클래스 수준이므로 ComponentClass로 구현"
+  },
+  {
+    "type": "component_had_failure",
+    "from_type": "Component",
+    "to_type": "FailureEvent",
+    "cardinality": "one-to-many",
+    "source": "원본"
+  },
+  {
+    "type": "component_had_maintenance",
+    "from_type": "Component",
+    "to_type": "MaintenanceRecord",
+    "cardinality": "one-to-many",
+    "source": "원본"
+  },
+  {
+    "type": "maintenance_followed_failure",
+    "from_type": "MaintenanceRecord",
+    "to_type": "FailureEvent",
+    "cardinality": "many-to-one",
+    "source": "계산",
+    "note": "reactive 기록만. 선행 고장 중 가장 최근 1건에 연결"
+  }
+]

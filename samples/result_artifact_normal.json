@@ -1,0 +1,52 @@
+{
+  "_comment": "[구조 참고용 — azure-pdm azure PdM 데이터 기반 수동 근사값] 케이스: machine=1, 2015-06-15T12:00:00 — normal 상태. v3 데이터 기반 샘플은 result_artifact_v3_normal.json 참조.",
+  "subject": {
+    "equipment_id": 1,
+    "model_code": "model3",
+    "age_years": 18,
+    "observation_timestamp": "2015-06-15T12:00:00",
+    "window_start": "2015-06-14T12:00:00"
+  },
+  "prediction": {
+    "status": "normal",
+    "score": 0.08,
+    "threshold": 0.35,
+    "basis": "model_prediction"
+  },
+  "top_factors": [],
+  "evidence": [],
+  "recommended_actions": [
+    {
+      "priority": "monitor",
+      "action": "정기 점검 일정 유지",
+      "target_component": null,
+      "basis": "no_anomaly_detected"
+    }
+  ],
+  "model": {
+    "name": "HistGradientBoostingClassifier_baseline",
+    "version": "1.0",
+    "algorithm": "HistGradientBoostingClassifier",
+    "train_cutoff": "2015-10-01T00:00:00",
+    "features": [
+      "volt_mean24h", "rotate_mean24h", "pressure_mean24h", "vibration_mean24h",
+      "volt_std24h", "rotate_std24h", "pressure_std24h", "vibration_std24h"
+    ]
+  },
+  "lineage": {
+    "evidence_id": "ep-1-20150615-120000",
+    "generated_at": "2026-08-04T00:00:00",
+    "data_sources": [
+      "PdM_telemetry.csv",
+      "PdM_errors.csv",
+      "PdM_failures.csv",
+      "PdM_maint.csv",
+      "PdM_machines.csv"
+    ]
+  },
+  "data_quality": {
+    "insufficient_data": false,
+    "window_rows": 24,
+    "warnings": []
+  }
+}

@@ -1,0 +1,85 @@
+{
+  "_comment": "[구조 참고용 — azure-pdm azure PdM 데이터 기반 수동 근사값] 케이스: machine=5, 2015-09-06T06:00:00 — alarm 상태. v3 데이터 기반 샘플은 result_artifact_v3_critical.json 참조.",
+  "subject": {
+    "equipment_id": 5,
+    "model_code": "model3",
+    "age_years": 7,
+    "observation_timestamp": "2015-09-06T06:00:00",
+    "window_start": "2015-09-05T06:00:00"
+  },
+  "prediction": {
+    "status": "alarm",
+    "score": 0.72,
+    "threshold": 0.35,
+    "basis": "model_prediction"
+  },
+  "top_factors": [
+    {
+      "rank": 1,
+      "component": "comp1",
+      "associated_sensor": "volt",
+      "sensor_z_score": 4.09,
+      "z_threshold": 3.75,
+      "direction": "both",
+      "association": "sensor_anomaly_associated_with_comp1_candidate"
+    }
+  ],
+  "evidence": [
+    {
+      "type": "sensor_anomaly",
+      "sensor": "volt",
+      "value": 163.48,
+      "reference": "rolling_mean_std_training_only_lt_2015-10-01",
+      "z_score": 4.09,
+      "note": "volt 24h 평균이 기준선 대비 +4.09σ 이탈 — comp1 이상 후보"
+    },
+    {
+      "type": "error_event",
+      "errorID": "error5",
+      "value": "2015-09-05T18:30:00",
+      "reference": "24h window",
+      "z_score": null,
+      "note": "error5 발생 — 과거 이력상 24h 내 고장 전환율 50.3% (후보 근거, 인과 미확정)"
+    }
+  ],
+  "recommended_actions": [
+    {
+      "priority": "urgent",
+      "action": "comp1 점검 — volt 편차 및 error5 발생 근거로 조기 점검 권고",
+      "target_component": "comp1",
+      "basis": "sensor_anomaly + error_event"
+    },
+    {
+      "priority": "monitor",
+      "action": "comp4 경과일 확인 — 마지막 교체 후 118일 경과",
+      "target_component": "comp4",
+      "basis": "maintenance_context.days_elapsed"
+    }
+  ],
+  "model": {
+    "name": "HistGradientBoostingClassifier_baseline",
+    "version": "1.0",
+    "algorithm": "HistGradientBoostingClassifier",
+    "train_cutoff": "2015-10-01T00:00:00",
+    "features": [
+      "volt_mean24h", "rotate_mean24h", "pressure_mean24h", "vibration_mean24h",
+      "volt_std24h", "rotate_std24h", "pressure_std24h", "vibration_std24h"
+    ]
+  },
+  "lineage": {
+    "evidence_id": "ep-5-20150906-060000",
+    "generated_at": "2026-08-04T00:00:00",
+    "data_sources": [
+      "PdM_telemetry.csv",
+      "PdM_errors.csv",
+      "PdM_failures.csv",
+      "PdM_maint.csv",
+      "PdM_machines.csv"
+    ]
+  },
+  "data_quality": {
+    "insufficient_data": false,
+    "window_rows": 24,
+    "warnings": []
+  }
+}

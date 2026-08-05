@@ -1,0 +1,155 @@
+{
+  "_comment": "[구조 참고용 — azure-pdm azure PdM 데이터 기반 수동 근사값] 케이스: machine=5, 2015-09-06T06:00:00 — comp1 고장 직전. v3 데이터 기반 샘플은 evidence_package_v3_critical.json 참조.",
+  "machine_id": 5,
+  "timestamp": "2015-09-06T06:00:00",
+  "window_start": "2015-09-05T06:00:00",
+  "sensor_evidence": {
+    "sensors": {
+      "volt": {
+        "mean_24h": 163.48,
+        "z_score": 4.09,
+        "basis": {
+          "global_mean": 170.77,
+          "global_std": 1.79,
+          "global_n": 24
+        }
+      },
+      "rotate": {
+        "mean_24h": 355.63,
+        "z_score": -1.73,
+        "basis": {
+          "global_mean": 446.61,
+          "global_std": 52.5,
+          "global_n": 24
+        }
+      },
+      "pressure": {
+        "mean_24h": 99.12,
+        "z_score": 0.11,
+        "basis": {
+          "global_mean": 100.86,
+          "global_std": 15.61,
+          "global_n": 24
+        }
+      },
+      "vibration": {
+        "mean_24h": 39.87,
+        "z_score": 0.44,
+        "basis": {
+          "global_mean": 40.39,
+          "global_std": 1.19,
+          "global_n": 24
+        }
+      }
+    },
+    "window_rows": 24,
+    "reference_frame": "rolling_mean_std_training_only_lt_2015-10-01",
+    "window": {
+      "start": "2015-09-05 06:00:00",
+      "end": "2015-09-06 06:00:00"
+    }
+  },
+  "peer_comparison": {
+    "percentile_by_sensor": {
+      "volt": {
+        "percentile": 91.2,
+        "target_z": 4.09,
+        "peers_with_data": 8
+      },
+      "rotate": {
+        "percentile": 22.4,
+        "target_z": -1.73,
+        "peers_with_data": 8
+      },
+      "pressure": {
+        "percentile": 51.3,
+        "target_z": 0.11,
+        "peers_with_data": 8
+      },
+      "vibration": {
+        "percentile": 57.8,
+        "target_z": 0.44,
+        "peers_with_data": 8
+      }
+    },
+    "peer_count": 9,
+    "basis": {
+      "model": "model3",
+      "age_range": "4–10",
+      "reference_frame": "global_z_same_window"
+    }
+  },
+  "error_context": {
+    "count": 1,
+    "errors": [
+      {
+        "errorID": "error5",
+        "datetime": "2015-09-05T18:30:00",
+        "failure_conversion_rate_24h": 0.5028,
+        "basis": {
+          "total_occurrences_all_time": 356,
+          "converted_to_failure_24h": 179
+        }
+      }
+    ]
+  },
+  "maintenance_context": {
+    "comp1": {
+      "last_replacement": "2015-07-15T00:00:00",
+      "days_elapsed": 52.5,
+      "type": "preventive",
+      "basis": {
+        "maint_datetime": "2015-07-15T00:00:00",
+        "failure_within_24h_before_maint": false
+      }
+    },
+    "comp2": {
+      "last_replacement": "2015-08-20T00:00:00",
+      "days_elapsed": 17.1,
+      "type": "preventive",
+      "basis": {
+        "maint_datetime": "2015-08-20T00:00:00",
+        "failure_within_24h_before_maint": false
+      }
+    },
+    "comp3": {
+      "last_replacement": "2015-06-01T00:00:00",
+      "days_elapsed": 96.6,
+      "type": "preventive",
+      "basis": {
+        "maint_datetime": "2015-06-01T00:00:00",
+        "failure_within_24h_before_maint": false
+      }
+    },
+    "comp4": {
+      "last_replacement": "2015-05-10T00:00:00",
+      "days_elapsed": 118.9,
+      "type": "preventive",
+      "basis": {
+        "maint_datetime": "2015-05-10T00:00:00",
+        "failure_within_24h_before_maint": false
+      }
+    }
+  },
+  "component_hypotheses": [
+    {
+      "component": "comp1",
+      "associated_sensor": "volt",
+      "sensor_z_score": 4.09,
+      "z_threshold": 3.75,
+      "direction": "both",
+      "association": "sensor_anomaly_associated_with_comp1_candidate"
+    }
+  ],
+  "status_flags": {
+    "no_prior_error": false,
+    "multiple_candidates": false,
+    "insufficient_data": false
+  },
+  "model_prediction": {
+    "probability": 0.72,
+    "threshold": 0.35,
+    "alarm_triggered": true,
+    "model_name": "HistGradientBoostingClassifier_baseline"
+  }
+}

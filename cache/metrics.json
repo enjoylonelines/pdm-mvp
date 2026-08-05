@@ -1,0 +1,13 @@
+{
+  "pr_auc": 0.2365,
+  "threshold": 0.1541,
+  "precision": 0.2098,
+  "recall": 0.6642,
+  "f1": 0.3189,
+  "tp": 2692,
+  "fp": 10137,
+  "fn": 1361,
+  "tn": 207310,
+  "val_positives": 4053,
+  "val_total": 221500
+}

@@ -1,0 +1,4 @@
+{"sensor_code": "volt", "direction": "both", "unit": null, "associated_component_code": "comp1", "_source": {"sensor_code": "원본", "direction": "계산", "unit": "신규", "associated_component_code": "계산"}}
+{"sensor_code": "rotate", "direction": "negative", "unit": null, "associated_component_code": "comp2", "_source": {"sensor_code": "원본", "direction": "계산", "unit": "신규", "associated_component_code": "계산"}}
+{"sensor_code": "pressure", "direction": "both", "unit": null, "associated_component_code": "comp3", "_source": {"sensor_code": "원본", "direction": "계산", "unit": "신규", "associated_component_code": "계산"}}
+{"sensor_code": "vibration", "direction": "both", "unit": null, "associated_component_code": "comp4", "_source": {"sensor_code": "원본", "direction": "계산", "unit": "신규", "associated_component_code": "계산"}}

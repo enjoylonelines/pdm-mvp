@@ -1,0 +1,112 @@
+[
+  {
+    "type": "Machine",
+    "interfaces": [
+      "Monitorable"
+    ],
+    "id_field": "machine_id",
+    "instance_file": "machine.jsonl"
+  },
+  {
+    "type": "MachineModel",
+    "interfaces": [
+      "FleetAggregate"
+    ],
+    "id_field": "model_code",
+    "instance_file": "machine_model.jsonl"
+  },
+  {
+    "type": "Component",
+    "interfaces": [
+      "Monitorable",
+      "Maintainable"
+    ],
+    "id_field": "component_id",
+    "instance_file": "component.jsonl"
+  },
+  {
+    "type": "ComponentClass",
+    "interfaces": [
+      "FleetAggregate"
+    ],
+    "id_field": "comp_code",
+    "instance_file": "component_class.jsonl"
+  },
+  {
+    "type": "ModelComponentProfile",
+    "interfaces": [
+      "FleetAggregate"
+    ],
+    "id_field": "profile_id",
+    "instance_file": "model_component_profile.jsonl"
+  },
+  {
+    "type": "PartDemandProfile",
+    "interfaces": [
+      "FleetAggregate"
+    ],
+    "id_field": "comp_code",
+    "instance_file": "part_demand_profile.jsonl"
+  },
+  {
+    "type": "SensorChannel",
+    "interfaces": [
+      "Monitorable"
+    ],
+    "id_field": "sensor_code",
+    "instance_file": "sensor_channel.jsonl"
+  },
+  {
+    "type": "PeerGroup",
+    "interfaces": [],
+    "id_field": "group_id",
+    "instance_file": "peer_group.jsonl"
+  },
+  {
+    "type": "ErrorType",
+    "interfaces": [],
+    "id_field": "error_code",
+    "instance_file": "error_type.jsonl"
+  },
+  {
+    "type": "ErrorEvent",
+    "interfaces": [
+      "TemporalEvent"
+    ],
+    "id_field": "event_id",
+    "instance_file": "error_event.jsonl"
+  },
+  {
+    "type": "FailureEvent",
+    "interfaces": [
+      "TemporalEvent"
+    ],
+    "id_field": "event_id",
+    "instance_file": "failure_event.jsonl"
+  },
+  {
+    "type": "MaintenanceRecord",
+    "interfaces": [
+      "TemporalEvent",
+      "Auditable"
+    ],
+    "id_field": "record_id",
+    "instance_file": "maintenance_record.jsonl"
+  },
+  {
+    "type": "BaselineProfile",
+    "interfaces": [
+      "Versioned"
+    ],
+    "id_field": "version",
+    "instance_file": "baseline_profile.jsonl"
+  },
+  {
+    "type": "ThresholdPolicy",
+    "interfaces": [
+      "Versioned"
+    ],
+    "id_field": "version",
+    "instance_file": "threshold_policy.jsonl"
+  }
+]

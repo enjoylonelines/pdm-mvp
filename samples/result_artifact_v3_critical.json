@@ -1,0 +1,122 @@
+{
+  "_source": "v3 result_artifact.jsonl — CMP-S03-L03-01, 2026-08-29T23:00:00+09:00",
+  "_dataset_version": "canonical-ai4i-physics-v3.0",
+  "subject": {
+    "equipment_id": "CMP-S03-L03-01",
+    "asset_type": "compressor",
+    "observation_timestamp": "2026-08-29T23:00:00+09:00",
+    "window_start": "2026-08-28T23:10:00+09:00",
+    "prediction_horizon_hours": 24
+  },
+  "prediction": {
+    "status": "alarm",
+    "status_grade": "critical",
+    "score": 0.824661,
+    "confidence": 0.649322,
+    "predicted_failure_type": "failure_risk",
+    "basis": "independent-logreg-v3.0"
+  },
+  "top_factors": [
+    {
+      "rank": 1,
+      "feature": "rotation_raw_6h_mean",
+      "feature_value": -0.983057,
+      "signed_contribution": 1.065268,
+      "direction": "risk_up",
+      "explanation_method": "linear_logit_contribution"
+    },
+    {
+      "rank": 2,
+      "feature": "rotation_raw_6h_abs_mean",
+      "feature_value": 1.051324,
+      "signed_contribution": 0.356365,
+      "direction": "risk_up",
+      "explanation_method": "linear_logit_contribution"
+    },
+    {
+      "rank": 3,
+      "feature": "rotation_raw_6h_std",
+      "feature_value": 0.747285,
+      "signed_contribution": 0.337334,
+      "direction": "risk_up",
+      "explanation_method": "linear_logit_contribution"
+    }
+  ],
+  "evidence": [
+    {
+      "type": "sensor_window",
+      "window_rows": 144,
+      "reference_frame": "rolling_mean_std_training_only_canonical_v3",
+      "sensors": {
+        "voltage_raw": {
+          "mean_window": 175.0854,
+          "z_score": null,
+          "basis": {
+            "window_rows_for_sensor": 144,
+            "relative_vibration_z": null,
+            "reference": "canonical-ai4i-physics-v3.0 compressor_sensor_observation"
+          }
+        },
+        "rotation_raw": {
+          "mean_window": 420.1058,
+          "z_score": null,
+          "basis": {
+            "window_rows_for_sensor": 144,
+            "relative_vibration_z": null,
+            "reference": "canonical-ai4i-physics-v3.0 compressor_sensor_observation"
+          }
+        },
+        "pressure_raw": {
+          "mean_window": 96.3931,
+          "z_score": null,
+          "basis": {
+            "window_rows_for_sensor": 144,
+            "relative_vibration_z": null,
+            "reference": "canonical-ai4i-physics-v3.0 compressor_sensor_observation"
+          }
+        },
+        "vibration_raw": {
+          "mean_window": 39.8073,
+          "z_score": null,
+          "basis": {
+            "window_rows_for_sensor": 144,
+            "relative_vibration_z": 0.6828,
+            "reference": "canonical-ai4i-physics-v3.0 compressor_sensor_observation"
+          }
+        }
+      }
+    }
+  ],
+  "recommended_actions": [
+    {
+      "action": "immediate_inspection_and_stop_review",
+      "priority": "urgent",
+      "basis": "result_artifact.recommended_action"
+    }
+  ],
+  "model": {
+    "version": "independent-logreg-v3.0",
+    "dataset_version": "canonical-ai4i-physics-v3.0",
+    "prediction_task": "binary_failure_within_horizon"
+  },
+  "lineage": {
+    "evidence_id": "RESULT#CMP-S03-L03-01#2026-08-29T23:00:00+09:00",
+    "artifact_type": "predictive_maintenance_result",
+    "schema_version": "result-artifact-v1.0",
+    "generated_at": "2026-08-04T08:28:06.044226+00:00",
+    "dataset_version": "canonical-ai4i-physics-v3.0",
+    "model_version": "independent-logreg-v3.0",
+    "prediction_id": "CMP-S03-L03-01#2026-08-29T23:00:00+09:00",
+    "data_sources": [
+      "compressor_sensor_observation.csv",
+      "maintenance_event.csv",
+      "result_artifact.jsonl"
+    ],
+    "canonical_source_mutated": false
+  },
+  "data_quality": {
+    "insufficient_data": false,
+    "window_rows": 144,
+    "warnings": []
+  }
+}
