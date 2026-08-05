@@ -46,35 +46,76 @@ def _rf(v: float, n: int = 6) -> float:
 # 데이터 로더 (선택적 — 없어도 동작)
 # ---------------------------------------------------------------------------
 
+# 자산 유형별 센서 컬럼. v3.1은 유형마다 관측 스키마가 다르며 공통 필드가 없다.
+SENSOR_COLS_BY_TYPE: dict[str, list[str]] = {
+    "compressor": ["voltage_raw", "rotation_raw", "pressure_raw", "vibration_raw"],
+    "cnc": [
+        "air_temperature_k",
+        "process_temperature_k",
+        "rotational_speed_rpm",
+        "torque_nm",
+        "tool_wear_min",
+    ],
+}
+
+SENSOR_CSV_BY_TYPE: dict[str, str] = {
+    "compressor": "compressor_sensor_observation.csv",
+    "cnc": "cnc_sensor_observation.csv",
+}
+
+# CSV 전체 스캔을 자산별로 반복하지 않기 위한 프로세스 내 캐시.
+_SENSOR_CACHE: dict[str, dict[str, list[dict]]] = {}
+
+
+def _index_sensor_csv(sensor_csv: Path) -> dict[str, list[dict]]:
+    """센서 CSV를 asset_id 기준으로 한 번만 색인한다."""
+    key = str(sensor_csv)
+    if key in _SENSOR_CACHE:
+        return _SENSOR_CACHE[key]
+
+    index: dict[str, list[dict]] = {}
+    if sensor_csv.exists():
+        with open(sensor_csv, newline="") as f:
+            for row in csv.DictReader(f):
+                index.setdefault(row.get("asset_id", ""), []).append(row)
+    _SENSOR_CACHE[key] = index
+    return index
+
+
 def _load_sensor_window(
     sensor_csv: Path,
     asset_id: str,
     observed_at: str,
     window_hours: int = WINDOW_HOURS,
 ) -> list[dict]:
-    """compressor_sensor_observation.csv에서 해당 장비의 24h 창 레코드 반환."""
-    if not sensor_csv.exists():
+    """센서 CSV에서 해당 자산의 관측 창 레코드를 반환한다.
+
+    창 경계는 `(observed_at - window_hours, observed_at]` — 끝 포함.
+    `maintenance_rules`의 관측 창 규칙과 같은 방향이다.
+    """
+    index = _index_sensor_csv(sensor_csv)
+    if asset_id not in index:
         return []
 
     obs_ts = datetime.fromisoformat(observed_at)
     window_start = obs_ts - timedelta(hours=window_hours)
     rows = []
-    with open(sensor_csv, newline="") as f:
-        for row in csv.DictReader(f):
-            if row.get("asset_id") != asset_id:
-                continue
-            try:
-                ts = datetime.fromisoformat(row["observed_at"])
-            except (ValueError, KeyError):
-                continue
-            if window_start < ts <= obs_ts:
-                rows.append(row)
+    for row in index[asset_id]:
+        try:
+            ts = datetime.fromisoformat(row["observed_at"])
+        except (ValueError, KeyError):
+            continue
+        if window_start < ts <= obs_ts:
+            rows.append(row)
     return rows
 
 
-def _build_sensor_evidence_from_window(rows: list[dict]) -> dict:
-    """센서 창 레코드 → sensor_evidence 구조."""
-    SENSOR_COLS = ["voltage_raw", "rotation_raw", "pressure_raw", "vibration_raw"]
+def _build_sensor_evidence_from_window(
+    rows: list[dict],
+    asset_type: str = "compressor",
+) -> dict:
+    """센서 창 레코드 → sensor_evidence 구조. 센서 목록은 자산 유형이 결정한다."""
+    SENSOR_COLS = SENSOR_COLS_BY_TYPE.get(asset_type, SENSOR_COLS_BY_TYPE["compressor"])
     sensors_out: dict = {}
 
     if not rows:
@@ -113,7 +154,7 @@ def _build_sensor_evidence_from_window(rows: list[dict]) -> dict:
             "basis": {
                 "window_rows_for_sensor": len(vals),
                 "relative_vibration_z": rel_z if s == "vibration_raw" else None,
-                "reference": "canonical-ai4i-physics-v3.1 compressor_sensor_observation",
+                "reference": f"{DATASET_VERSION} {SENSOR_CSV_BY_TYPE.get(asset_type, '?')}",
             },
         }
 
@@ -124,6 +165,124 @@ def _build_sensor_evidence_from_window(rows: list[dict]) -> dict:
         "reference_frame": "rolling_mean_std_training_only_canonical_v3",
         "window": {"start": timestamps[0], "end": timestamps[-1]},
     }
+
+
+# ---------------------------------------------------------------------------
+# 자산 마스터 · 동종 집단
+# ---------------------------------------------------------------------------
+
+_ASSET_CACHE: dict[str, dict[str, dict]] = {}
+
+
+def _load_asset_master(asset_csv: Path) -> dict[str, dict]:
+    """asset_master.csv → {asset_id: {asset_type, site_id, cell_id}}."""
+    key = str(asset_csv)
+    if key in _ASSET_CACHE:
+        return _ASSET_CACHE[key]
+    out: dict[str, dict] = {}
+    if asset_csv.exists():
+        with open(asset_csv, newline="") as f:
+            for row in csv.DictReader(f):
+                out[row["asset_id"]] = row
+    _ASSET_CACHE[key] = out
+    return out
+
+
+def _build_peer_comparison(
+    asset_id: str,
+    observed_at: str,
+    sensor_csv: Path,
+    asset_master: dict[str, dict],
+    asset_type: str,
+    min_peers: int = 5,
+) -> dict:
+    """
+    동종 집단 대비 백분위.
+
+    Azure PdM은 `(model, 연식 ±3)`으로 집단을 정의했으나 v3.1에는 모델·연식이 없다.
+    대신 자산 마스터의 **같은 cell 안 같은 유형**을 동종으로 본다.
+    셀 단위 표본이 부족하면 site 단위로 넓힌다.
+    """
+    me = asset_master.get(asset_id)
+    if not me:
+        return {"error": "asset_not_found_in_master", "peer_count": 0,
+                "percentile_by_sensor": {}}
+
+    def _members(scope: str) -> list[str]:
+        return [
+            aid for aid, r in asset_master.items()
+            if r.get("asset_type") == asset_type and r.get(scope) == me.get(scope)
+        ]
+
+    scope = "cell_id"
+    peer_ids = _members(scope)
+    if len(peer_ids) < min_peers:
+        scope = "site_id"
+        peer_ids = _members(scope)
+
+    basis = {
+        "grouping": scope,
+        "scope_value": me.get(scope),
+        "asset_type": asset_type,
+        "reference_frame": f"same_{scope}_same_asset_type_window_mean",
+    }
+    if len(peer_ids) <= 1:
+        return {"peer_count": 0, "percentile_by_sensor": {}, "basis": basis,
+                "sufficient_peers": False}
+
+    cols = SENSOR_COLS_BY_TYPE.get(asset_type, [])
+    peer_means: dict[str, dict[str, float]] = {}
+    for pid in peer_ids:
+        rows = _load_sensor_window(sensor_csv, pid, observed_at)
+        if not rows:
+            continue
+        m: dict[str, float] = {}
+        for c in cols:
+            vals = []
+            for r in rows:
+                try:
+                    v = r.get(c)
+                    if v not in (None, "", "nan"):
+                        vals.append(float(v))
+                except ValueError:
+                    pass
+            if vals:
+                m[c] = sum(vals) / len(vals)
+        if m:
+            peer_means[pid] = m
+
+    pct_by_sensor: dict[str, Optional[dict]] = {}
+    for c in cols:
+        vals = {p: m[c] for p, m in peer_means.items() if c in m}
+        target = vals.get(asset_id)
+        if target is None or len(vals) < 2:
+            pct_by_sensor[c] = None
+            continue
+        below = sum(1 for v in vals.values() if v < target)
+        pct_by_sensor[c] = {
+            "percentile": round(below / (len(vals) - 1) * 100, 1),
+            "target_value": round(target, 4),
+            "peers_with_data": len(vals),
+        }
+
+    return {
+        "peer_count": len(peer_ids),
+        "percentile_by_sensor": pct_by_sensor,
+        "basis": basis,
+        # 표본 부족 시 백분위를 판단 근거로 쓰지 않는다는 표시
+        "sufficient_peers": len(peer_ids) >= min_peers,
+    }
+
+
+# ---------------------------------------------------------------------------
+# 정비 문맥
+# ---------------------------------------------------------------------------
+
+# v3.1은 정비 유형을 데이터로 제공한다. 역추정하지 않는다(결정 019 참조).
+MAINTENANCE_TYPE_MAP = {
+    "failure_recovery": "reactive",
+    "planned_tool_change": "preventive",
+}
 
 
 def _load_maintenance_context(
@@ -148,28 +307,43 @@ def _load_maintenance_context(
             if completed_ts <= obs_ts:
                 events.append(row)
 
+    # 정비 단위 키. Azure PdM은 계통(comp1~4)이 단위였으나 v3.1은 자산 자체가 단위다.
+    # 리포트 블록이 {단위: 정보} 구조를 순회하므로 형태를 맞춘다.
+    unit_key = asset_id
+
     if not events:
         return {
-            "last_maintenance": None,
-            "days_elapsed": None,
-            "maintenance_type": None,
-            "basis": "no_maintenance_record_before_observation",
+            unit_key: {
+                "display_name": asset_id,
+                "last_replacement": None,
+                "days_elapsed": None,
+                "type": None,
+                "basis": "no_maintenance_record_before_observation",
+            }
         }
 
     # 가장 최근 정비
     last = max(events, key=lambda r: r.get("completed_at", ""))
     last_ts = datetime.fromisoformat(last["completed_at"])
     days_elapsed = round((obs_ts - last_ts).total_seconds() / 86400, 1)
+    raw_type = last.get("maintenance_type")
 
     return {
-        "last_maintenance": last["completed_at"],
-        "days_elapsed": days_elapsed,
-        "maintenance_type": last.get("maintenance_type"),
-        "tool_replaced": last.get("tool_replaced") == "1",
-        "basis": {
-            "maintenance_id": last.get("maintenance_id"),
-            "completed_at": last["completed_at"],
-        },
+        unit_key: {
+            "display_name": asset_id,
+            "last_replacement": last["completed_at"],
+            "days_elapsed": days_elapsed,
+            "type": MAINTENANCE_TYPE_MAP.get(raw_type),
+            "tool_replaced": last.get("tool_replaced") == "1",
+            "basis": {
+                "maintenance_id": last.get("maintenance_id"),
+                "maintenance_type_raw": raw_type,
+                "completed_at": last["completed_at"],
+                "source_event_id": last.get("source_event_id") or None,
+                # v3.1은 유형을 데이터로 제공한다. 24시간 창 역추정이 필요 없다.
+                "type_source": "canonical_field",
+            },
+        }
     }
 
 
@@ -182,6 +356,7 @@ def result_artifact_to_evidence_package(
     *,
     sensor_csv: Optional[Path] = None,
     maint_csv:  Optional[Path] = None,
+    asset_master: Optional[dict] = None,
 ) -> dict:
     """
     v3 Result Artifact 1건 → azure-pdm Evidence Package 형태.
@@ -194,17 +369,32 @@ def result_artifact_to_evidence_package(
     status_grade = artifact.get("status_grade", "normal")
     pred_status = STATUS_MAP.get(status_grade, "normal")
 
+    asset_type = artifact.get("asset_type", "")
+
     # ── sensor_evidence ───────────────────────────────────────────────────────
-    if sensor_csv and artifact.get("asset_type") == "compressor":
+    # 자산 유형이 센서 스키마를 결정한다. 압축기와 CNC는 공통 센서 필드가 없다.
+    if sensor_csv and asset_type in SENSOR_COLS_BY_TYPE:
         sensor_rows = _load_sensor_window(sensor_csv, asset_id, observed_at)
-        sensor_evidence = _build_sensor_evidence_from_window(sensor_rows)
+        sensor_evidence = _build_sensor_evidence_from_window(sensor_rows, asset_type)
     else:
         sensor_evidence = {
             "sensors": {},
             "window_rows": 0,
             "reference_frame": "rolling_mean_std_training_only_canonical_v3",
             "window": {"start": None, "end": None},
-            "note": "sensor observation not loaded (asset_type may not be compressor or csv not provided)",
+            "note": f"sensor observation not loaded (asset_type={asset_type or 'unknown'})",
+        }
+
+    # ── peer_comparison ───────────────────────────────────────────────────────
+    if sensor_csv and asset_master and asset_type in SENSOR_COLS_BY_TYPE:
+        peer_comparison = _build_peer_comparison(
+            asset_id, observed_at, sensor_csv, asset_master, asset_type
+        )
+    else:
+        peer_comparison = {
+            "error": "asset_master or sensor csv not provided",
+            "peer_count": 0,
+            "percentile_by_sensor": {},
         }
 
     # ── component_hypotheses (top_factors → 후보 목록) ────────────────────────
@@ -239,6 +429,7 @@ def result_artifact_to_evidence_package(
 
     # ── status_flags ──────────────────────────────────────────────────────────
     status_flags = {
+        "no_prior_error": None,   # 경고 이벤트 개념 없음 — 판정 불가
         "status_grade": status_grade,
         "predicted_failure_type": artifact.get("predicted_failure_type"),
         "multiple_risk_factors": len(hypotheses) >= 2,
@@ -256,8 +447,9 @@ def result_artifact_to_evidence_package(
         "model_version": prov.get("model_version", MODEL_VERSION),
         "prediction_id": prov.get("prediction_id"),
         "data_sources": [
-            "compressor_sensor_observation.csv",
+            SENSOR_CSV_BY_TYPE.get(artifact.get("asset_type", ""), "sensor_observation.csv"),
             "maintenance_event.csv",
+            "asset_master.csv",
             "result_artifact.jsonl",
         ],
         "canonical_source_mutated": prov.get("canonical_source_mutated", False),
@@ -265,14 +457,31 @@ def result_artifact_to_evidence_package(
 
     return {
         # ── 식별 ──
+        # machine_id / timestamp 는 Azure PdM 계약과의 호환 별칭이다.
+        # 리포트 블록이 이 이름을 참조하므로 함께 제공한다.
+        "machine_id": asset_id,
+        "timestamp": observed_at,
         "asset_id": asset_id,
         "asset_type": artifact.get("asset_type"),
         "observed_at": observed_at,
         "prediction_horizon_hours": artifact.get("prediction_horizon_hours", WINDOW_HOURS),
         # ── 센서 근거 ──
         "sensor_evidence": sensor_evidence,
+        # ── 동종 집단 비교 ──
+        "peer_comparison": peer_comparison,
+        # ── 경고 이벤트 ──
+        # v3.1에는 비치명 경고 이벤트 개념이 없다. 없음을 명시해 블록이
+        # 근거 없이 문장을 만들지 않도록 한다(결정 002).
+        "error_context": {
+            "count": 0,
+            "errors": [],
+            "available": False,
+            "note": "canonical v3.1 has no non-fatal alert event source",
+        },
         # ── 모델 판정 ──
         "model_prediction": {
+            # 리포트 블록이 이 플래그로 판정 근거 유무를 확인한다
+            "available": artifact.get("failure_probability") is not None,
             "probability": _rf(artifact.get("failure_probability", 0.0)),
             "confidence": _rf(artifact.get("confidence", 0.0)),
             "status": pred_status,
@@ -324,8 +533,9 @@ def build_evidence_packages(
     asset_id:      특정 장비만 필터 (None = 전체)
     status_filter: status_grade 목록 필터 (예: ['critical', 'warning'])
     """
-    sensor_csv = v3_path / "canonical" / "dataset" / "compressor_sensor_observation.csv"
-    maint_csv  = v3_path / "canonical" / "dataset" / "maintenance_event.csv"
+    ds = v3_path / "canonical" / "dataset"
+    maint_csv = ds / "maintenance_event.csv"
+    asset_master = _load_asset_master(ds / "asset_master.csv")
 
     artifacts = load_all_result_artifacts(v3_path)
 
@@ -336,10 +546,15 @@ def build_evidence_packages(
 
     packages = []
     for artifact in artifacts:
+        # 센서 CSV는 자산 유형이 결정한다. 압축기와 CNC는 서로 다른 파일·스키마다.
+        csv_name = SENSOR_CSV_BY_TYPE.get(artifact.get("asset_type", ""))
+        sensor_csv = ds / csv_name if csv_name else None
+
         ep = result_artifact_to_evidence_package(
             artifact,
-            sensor_csv=sensor_csv if sensor_csv.exists() else None,
-            maint_csv=maint_csv  if maint_csv.exists()  else None,
+            sensor_csv=sensor_csv if sensor_csv and sensor_csv.exists() else None,
+            maint_csv=maint_csv if maint_csv.exists() else None,
+            asset_master=asset_master or None,
         )
         packages.append(ep)
     return packages
