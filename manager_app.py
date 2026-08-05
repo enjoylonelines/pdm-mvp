@@ -21,6 +21,7 @@ ROOT = Path(__file__).parent
 sys.path.insert(0, str(ROOT))
 
 import maintenance_rules
+import policy
 from evidence_package import load_data, compute_global_baseline, generate_evidence_package
 from report_generator import GRADE_ALARM, GRADE_WATCH, _all_candidates
 from z_baseline import load_baseline, load_thresholds, DEFAULT_BASELINE_PATH, DEFAULT_THRESHOLD_PATH
@@ -42,12 +43,10 @@ GRADE_BORDER = {'알람': '#fc8181', '관찰': '#f6ad55', '정상': '#68d391'}
 # 화면 표시명 — 내부 코드는 알람/관찰/정상 유지, 표시만 교체
 GRADE_LABEL  = {'알람': '즉시 교체 필요', '관찰': '관찰 필요', '정상': '정상'}
 
-# 등급별 과거 24시간 내 고장 발생 비율 (evaluate_metrics.py 검증 결과)
-GRADE_FAILURE_RATE = {'알람': 24.0, '관찰': 15.7, '정상': 0.01}
-
-# 추이 판정 기준 (화면에도 표시)
-# 최근 24시간 평균이 직전 24시간 평균 대비 이 %를 넘으면 "상승 중"으로 표기
-TREND_CHANGE_THRESHOLD_PCT = 20
+# 판정·표시 정책 상수는 policy.py 가 단일 출처로 보유한다
+TREND_CHANGE_THRESHOLD_PCT = policy.TREND_CHANGE_THRESHOLD_PCT
+WINDOW_H  = policy.OBSERVATION_WINDOW_HOURS
+TREND_H   = policy.TREND_COMPARE_WINDOW_HOURS
 
 # ────────────────────────────────────────────────────────────────────────────
 # 데이터 로딩 (캐시)
@@ -211,8 +210,8 @@ def _trend_label(sub: pd.DataFrame, sensor: str, ts: pd.Timestamp,
     sub = sub.copy()
     sub['_er'] = er.values
 
-    t24h = ts - pd.Timedelta(hours=24)
-    t48h = ts - pd.Timedelta(hours=48)
+    t24h = ts - pd.Timedelta(hours=WINDOW_H)
+    t48h = ts - pd.Timedelta(hours=TREND_H)
 
     r_mean = sub.loc[sub['datetime'] > t24h, '_er'].dropna().mean()
     p_mean = sub.loc[(sub['datetime'] > t48h) & (sub['datetime'] <= t24h), '_er'].dropna().mean()
@@ -273,7 +272,7 @@ def compute_topk_table(
         lambda er: '알람' if er >= GRADE_ALARM else ('관찰' if er >= GRADE_WATCH else '정상')
     )
 
-    win_start = ts - pd.Timedelta(hours=24)
+    win_start = ts - pd.Timedelta(hours=WINDOW_H)
     mids_err  = set(
         _errors_df[
             (_errors_df['datetime'] > win_start) & (_errors_df['datetime'] <= ts)
@@ -368,8 +367,8 @@ def _trend_summaries(trend_df: pd.DataFrame, ts_str: str) -> dict[str, str]:
         return {c: '데이터 없음' for c in COMP_SHORT}
 
     ts   = pd.Timestamp(ts_str)
-    t24h = ts - pd.Timedelta(hours=24)
-    t48h = ts - pd.Timedelta(hours=48)
+    t24h = ts - pd.Timedelta(hours=WINDOW_H)
+    t48h = ts - pd.Timedelta(hours=TREND_H)
 
     recent = trend_df[trend_df['datetime'] > t24h]
     prev   = trend_df[(trend_df['datetime'] > t48h) & (trend_df['datetime'] <= t24h)]
@@ -473,17 +472,25 @@ def render_situation(pkg: dict, candidates: list) -> None:
     mid      = pkg['machine_id']
     ts       = pkg['timestamp'][:16]
     err_cnt  = pkg['error_context']['count']
-    rate     = GRADE_FAILURE_RATE.get(top_grade, 0)
+    # 현재 데이터셋에서 측정된 값이 아니면 None. 수치를 제시하지 않는다.
+    rate     = policy.grade_failure_rate(top_grade)
 
     st.markdown(f"**장비 {mid}** &nbsp;·&nbsp; {ts}")
 
     if top_grade != '정상':
         comp_name = COMP_DISPLAY.get(top['comp'], top['comp'])
         st.markdown(
-            f"현재 등급: {badge_html(top_grade)} &nbsp;({comp_name} 기준)  \n"
-            f"이 등급의 과거 사례에서 **24시간 안에 실제 고장으로 이어진 경우: 약 {rate:.0f}%**",
+            f"현재 등급: {badge_html(top_grade)} &nbsp;({comp_name} 기준)",
             unsafe_allow_html=True,
         )
+        if rate is not None:
+            st.markdown(
+                f"이 등급의 과거 사례에서 "
+                f"**24시간 안에 실제 고장으로 이어진 경우: {rate:.2f}%**"
+            )
+            st.caption(policy.grade_failure_rate_detail(top_grade))
+        else:
+            st.caption(policy.grade_failure_rate_note(top_grade))
     else:
         st.markdown(
             f"현재 등급: {badge_html('정상')}  \n"
@@ -927,7 +934,7 @@ def main() -> None:
         K = st.slider("목록 건수", min_value=1, max_value=20, value=5)
 
         ts_str       = f"{sel_date} {sel_hour:02d}:00:00"
-        win_start_ts = pd.Timestamp(ts_str) - pd.Timedelta(hours=24)
+        win_start_ts = pd.Timestamp(ts_str) - pd.Timedelta(hours=WINDOW_H)
 
         st.markdown(f"**기준 시각:** {sel_date} {sel_hour:02d}:00")
         st.markdown(

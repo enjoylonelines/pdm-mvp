@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Union
 
 import maintenance_rules
+import policy
 
 from z_baseline import (
     load_baseline, load_thresholds, baseline_to_dataframe,
@@ -32,8 +33,9 @@ SENSOR_COMP_MAP: dict[str, tuple[str, str]] = {
 
 SENSORS = ['volt', 'rotate', 'pressure', 'vibration']
 COMPONENTS = ['comp1', 'comp2', 'comp3', 'comp4']
-WINDOW_HOURS = 24
-MIN_ROWS = 12
+# 정책 상수는 policy.py 가 단일 출처로 보유한다
+WINDOW_HOURS = policy.OBSERVATION_WINDOW_HOURS
+MIN_ROWS = policy.MIN_WINDOW_ROWS
 
 # 부품별 임계 (thresholds.json 에서 로드. 없으면 fallback)
 try:

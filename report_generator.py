@@ -15,6 +15,8 @@
 
 from __future__ import annotations
 
+import policy
+
 from z_baseline import (
     load_thresholds_full, load_thresholds,
     DEFAULT_THRESHOLD_PATH,
@@ -32,8 +34,9 @@ except Exception:
 # 등급 경계값 (evaluate_metrics.py 검증 결과 기반)
 # excess_ratio 구간별 P(failure): <0.8=0.01%, 0.8-1.0=15.7%, >=1.0=24.0%
 # 0.8에서 P(failure)가 2.2% → 15.7%로 7배 증가 → 관찰/정상 경계로 타당
-GRADE_ALARM = 1.0   # excess_ratio ≥ 1.0  → 알람
-GRADE_WATCH = 0.8   # 0.8 ≤ er < 1.0      → 관찰
+# 등급 경계는 policy.py 가 단일 출처로 보유한다
+GRADE_ALARM = policy.GRADE_ALARM_THRESHOLD   # er ≥ 1.0  → 알람
+GRADE_WATCH = policy.GRADE_WATCH_THRESHOLD   # 0.8 ≤ er < 1.0 → 관찰
 # er < 0.8 → 정상
 
 def _grade(excess_ratio: float) -> str:
@@ -71,6 +74,21 @@ _SENSOR_COMP: dict[str, str] = {
 }
 
 _SENSOR_ORDER = ['volt', 'rotate', 'pressure', 'vibration']
+
+
+def _sensors_of(pkg: dict) -> list[str]:
+    """패키지에 실제로 존재하는 센서 목록.
+
+    자산 유형이 센서 스키마를 결정하므로 모듈 상수로 고정할 수 없다.
+    비어 있으면 기존 기본값을 쓴다.
+    """
+    se = (pkg.get('sensor_evidence') or {}).get('sensors') or {}
+    return list(se.keys()) or _SENSOR_ORDER
+
+
+def _sensor_ko(code: str) -> str:
+    """표시명. 매핑에 없으면 코드를 그대로 쓴다."""
+    return SENSOR_KO.get(code, code)
 
 # 부품별 임계 (thresholds.json 에서 로드됨)
 # 센서별 배율이 달라(2.33~3.28) 직접 비교 대신 "임계 대비 초과 배수"로 정렬
@@ -118,7 +136,11 @@ def _all_candidates(pkg: dict) -> list[dict]:
     sensors = pkg['sensor_evidence']['sensors']
     result  = []
 
-    for s in _SENSOR_ORDER:
+    for s in _sensors_of(pkg):
+        # 센서→계통 매핑이 없는 도메인(자산이 정비 단위인 경우)은 이 경로를 쓰지 않는다.
+        # 그런 도메인은 패키지의 component_hypotheses 를 직접 쓴다.
+        if s not in _SENSOR_COMP:
+            continue
         direction = _SENSOR_DIRECTION[s]
         comp      = _SENSOR_COMP[s]
         threshold = _comp_threshold(comp)
@@ -153,6 +175,25 @@ def _all_candidates(pkg: dict) -> list[dict]:
     return result
 
 
+def _hypothesis_lines(pkg: dict) -> tuple[list[str], list[str]] | None:
+    """패키지가 직접 제공하는 이상 후보(component_hypotheses)를 문장으로.
+
+    모델이 기여 요인을 이미 산출해 주는 도메인에서는 센서 z 경로 대신 이쪽을 쓴다.
+    """
+    hyps = pkg.get('component_hypotheses') or []
+    if not hyps or 'feature' not in hyps[0]:
+        return None
+    lines, source = [], []
+    for h in hyps:
+        val = h.get('feature_value')
+        contrib = h.get('signed_contribution')
+        val_txt = f" 값={val:g}" if isinstance(val, (int, float)) else ""
+        c_txt = f" 기여={contrib:+.4f}" if isinstance(contrib, (int, float)) else ""
+        lines.append(f"• {h['feature']}{val_txt}{c_txt}  ({h.get('association','후보')})")
+        source += ['component_hypotheses.feature',
+                   'component_hypotheses.signed_contribution']
+    return lines, source
+
 # ════════════════════════════════════════════════════════════════════════════
 # 매니저 블록 — 판단 중심 어휘, 수치 최소, 해석 없음
 # ════════════════════════════════════════════════════════════════════════════
@@ -160,7 +201,9 @@ def _all_candidates(pkg: dict) -> list[dict]:
 def _mgr_executive_summary(pkg: dict) -> dict | None:
     flags   = pkg['status_flags']
     hyps    = pkg['component_hypotheses']  # evidence_package z>=1.75
-    err_cnt = pkg['error_context']['count']
+    ec      = pkg.get('error_context') or {}
+    err_cnt = ec.get('count', 0)
+    err_available = ec.get('available', True)
     mid     = pkg['machine_id']
     ts      = pkg['timestamp'][:16]
 
@@ -172,22 +215,33 @@ def _mgr_executive_summary(pkg: dict) -> dict | None:
         lines.append("모든 센서가 임계 미만. 이상 후보 없음.")
     else:
         n      = len(hyps)
-        clist  = '·'.join(COMP_KO[h['component']] for h in hyps)
+        # 후보 표기는 도메인마다 다르다. 계통 코드가 없으면 기여 요인 이름을 쓴다.
+        clist  = '·'.join(
+            COMP_KO.get(h['component'], h['component']) if 'component' in h
+            else str(h.get('feature', '?'))
+            for h in hyps
+        )
         plural = f"{n}건: " if n > 1 else ""
         lines.append(f"임계 초과 센서 감지. 점검 후보 {plural}{clist}.")
 
-    if err_cnt > 0:
+    if not err_available:
+        lines.append("선행 경고 이벤트: 데이터 없음 (판정 불가).")
+    elif err_cnt > 0:
         lines.append(f"직전 24h 에러 이벤트 {err_cnt}건 선행.")
     elif hyps:
         lines.append("직전 24h 에러 이벤트: 없음.")
 
     mp = pkg.get('model_prediction', {})
     if mp.get('available'):
-        alarm = mp.get('alarm_triggered')
-        prob  = mp.get('probability', '?')
-        thr   = mp.get('threshold', '?')
+        alarm = mp.get('alarm_triggered', mp.get('status') in ('alarm', 'watch'))
+        prob  = mp.get('probability')
+        thr   = mp.get('threshold')
         status = "알람" if alarm else "알람 없음"
-        lines.append(f"모델: {status}  (확률 {prob:.3f} / 임계 {thr:.3f})")
+        parts = []
+        if isinstance(prob, (int, float)): parts.append(f"확률 {prob:.3f}")
+        if isinstance(thr, (int, float)):  parts.append(f"임계 {thr:.3f}")
+        detail = f"  ({' / '.join(parts)})" if parts else ""
+        lines.append(f"모델: {status}{detail}")
 
     source = ['machine_id', 'timestamp', 'status_flags',
               'component_hypotheses', 'error_context.count', 'model_prediction']
@@ -256,12 +310,19 @@ def _mgr_component_candidates(pkg: dict) -> dict | None:
     if pkg['status_flags']['insufficient_data']:
         return _no_data('component_candidates', '부품 이상 후보', '데이터 불충분')
 
+    # 센서→계통 매핑이 없는 도메인은 모델이 준 기여 요인을 그대로 쓴다
     cands = _all_candidates(pkg)
+    if not cands:
+        fb = _hypothesis_lines(pkg)
+        if fb is None:
+            return _no_data('component_candidates', '이상 후보', '후보 산출 근거 없음')
+        return _block('component_candidates', '이상 후보', '\n'.join(fb[0]), fb[1])
+
     lines = ["임계 대비 초과 배수 순 (부품별 임계 상이):"]
 
     for c in cands:
-        comp_ko   = COMP_KO[c['comp']]
-        sensor_ko = SENSOR_KO[c['sensor']]
+        comp_ko   = COMP_KO.get(c['comp'], c['comp'])
+        sensor_ko = _sensor_ko(c['sensor'])
         z   = c['z']
         thr = c['threshold']
         er  = c['excess_ratio']
@@ -275,7 +336,7 @@ def _mgr_component_candidates(pkg: dict) -> dict | None:
             )
 
     lines.append(f"  (알람≥1.0× / 관찰0.8~1.0× / 정상<0.8×)")
-    source = [f"sensor_evidence.sensors.{s}.z_score" for s in _SENSOR_ORDER]
+    source = [f"sensor_evidence.sensors.{s}.z_score" for s in _sensors_of(pkg)]
     return _block('component_candidates', '부품 이상 후보', '\n'.join(lines), source)
 
 
@@ -285,7 +346,7 @@ def _mgr_maintenance_status(pkg: dict) -> dict | None:
     source = []
 
     for comp, info in maint.items():
-        comp_ko = COMP_KO[comp]
+        comp_ko = info.get('display_name') or COMP_KO.get(comp, comp)
         if info['last_replacement'] is None:
             lines.append(f"• {comp_ko}: 교체 이력 없음")
             source.append(f"maintenance_context.{comp}.last_replacement")
@@ -327,21 +388,22 @@ def _eng_model_prediction(pkg: dict) -> dict | None:
         return None
 
     prob  = mp['probability']
-    thr   = mp['threshold']
-    alarm = mp['alarm_triggered']
+    thr   = mp.get('threshold')
+    alarm = mp.get('alarm_triggered', mp.get('status') in ('alarm', 'watch'))
     fc    = mp.get('feature_contribution') or {}
 
     status = "알람 발생" if alarm else "알람 없음"
-    lines  = [f"모델 판정: {status}  (확률 {prob:.4f} / 임계 {thr:.4f})"]
+    thr_txt = f" / 임계 {thr:.4f}" if thr is not None else ""
+    lines  = [f"모델 판정: {status}  (확률 {prob:.4f}{thr_txt})"]
 
     sensor_pct = fc.get('sensor_pct', {})
     valid_pcts = {k: v for k, v in sensor_pct.items() if v is not None and v > 0}
     if valid_pcts:
         lines.append(f"센서별 기여도 ({fc.get('method', 'global_imp×magnitude')})")
-        for s in _SENSOR_ORDER:
+        for s in _sensors_of(pkg):
             pct = valid_pcts.get(s)
             if pct:
-                lines.append(f"  {SENSOR_KO[s]}: {pct:.1f}%")
+                lines.append(f"  {_sensor_ko(s)}: {pct:.1f}%")
 
     source = [
         'model_prediction.probability', 'model_prediction.threshold',
@@ -360,13 +422,13 @@ def _eng_sensor_deviation(pkg: dict) -> dict | None:
     lines  = [f"기준: 전 장비·전 기간 글로벌 baseline  (창 내 {win_rows}행)"]
     source = ['sensor_evidence.reference_frame', 'sensor_evidence.window_rows']
 
-    for s in _SENSOR_ORDER:
+    for s in _sensors_of(pkg):
         z = sensors[s].get('z_score')
         if z is None:
-            lines.append(f"  {SENSOR_KO[s]:4s}: z=N/A")
+            lines.append(f"  {_sensor_ko(s):4s}: z=N/A")
             continue
         flag = _z_flag(z, _SENSOR_DIRECTION[s], s)
-        lines.append(f"  {SENSOR_KO[s]:4s}: z={z:+.3f}  [{flag}]")
+        lines.append(f"  {_sensor_ko(s):4s}: z={z:+.3f}  [{flag}]")
         source.append(f"sensor_evidence.sensors.{s}.z_score")
 
     return _block('sensor_deviation', '센서 편차 현황', '\n'.join(lines), source)
@@ -386,21 +448,32 @@ def _eng_peer_comparison(pkg: dict) -> dict | None:
     model_str = basis.get('model', '?')
     age_range = basis.get('age_range', '?')
 
-    lines  = [f"동급: {model_str} / 연령 {age_range}년 / 비교 대상 {peer_count}대"]
+    if 'grouping' in basis:
+        head = (f"동급: {basis.get('asset_type','?')} / "
+                f"{basis['grouping']}={basis.get('scope_value','?')} / "
+                f"비교 대상 {peer_count}대")
+    else:
+        head = f"동급: {model_str} / 연령 {age_range}년 / 비교 대상 {peer_count}대"
+    lines  = [head]
+    if pc.get('sufficient_peers') is False:
+        lines.append("  표본 부족 — 백분위를 판단 근거로 쓰지 않음")
     source = ['peer_comparison.peer_count', 'peer_comparison.basis']
 
-    for s in _SENSOR_ORDER:
+    for s in _sensors_of(pkg):
         pdata = pc['percentile_by_sensor'].get(s)
         if pdata is None:
-            lines.append(f"  {SENSOR_KO[s]:4s}: 비교 데이터 없음")
+            lines.append(f"  {_sensor_ko(s):4s}: 비교 데이터 없음")
             continue
         pct     = pdata['percentile']
-        tgt_z   = pdata['target_z']
         peers_n = pdata['peers_with_data']
         label   = _pct_label(pct)
+        # z 기준선이 없는 도메인은 관측 평균으로 백분위를 낸다
+        tgt_z   = pdata.get('target_z')
+        tgt_val = pdata.get('target_value')
+        own = (f"  자기 z={tgt_z:+.3f}" if tgt_z is not None
+               else (f"  자기 관측평균={tgt_val:g}" if tgt_val is not None else ""))
         lines.append(
-            f"  {SENSOR_KO[s]:4s}: {peers_n}대 중 백분위 {pct:.1f}% ({label})"
-            f"  자기 z={tgt_z:+.3f}"
+            f"  {_sensor_ko(s):4s}: {peers_n}대 중 백분위 {pct:.1f}% ({label}){own}"
         )
         source += [
             f"peer_comparison.percentile_by_sensor.{s}.percentile",
@@ -430,8 +503,8 @@ def _eng_component_candidates(pkg: dict) -> dict | None:
 
     lines = [header]
     for c in cands:
-        comp_ko   = COMP_KO[c['comp']]
-        sensor_ko = SENSOR_KO[c['sensor']]
+        comp_ko   = COMP_KO.get(c['comp'], c['comp'])
+        sensor_ko = _sensor_ko(c['sensor'])
         direction = c['direction']
         z   = c['z']
         thr = c['threshold']
@@ -448,7 +521,7 @@ def _eng_component_candidates(pkg: dict) -> dict | None:
             )
 
     lines.append(f"  (알람≥1.0× / 관찰0.8~1.0× / 정상<0.8× | 정렬: excess_ratio 내림차순)")
-    source = [f"sensor_evidence.sensors.{s}.z_score" for s in _SENSOR_ORDER]
+    source = [f"sensor_evidence.sensors.{s}.z_score" for s in _sensors_of(pkg)]
     return _block('component_candidates', '부품 이상 후보', '\n'.join(lines), source)
 
 
@@ -510,7 +583,7 @@ def _eng_maintenance_detail(pkg: dict) -> dict | None:
     source = []
 
     for comp, info in maint.items():
-        comp_ko = COMP_KO[comp]
+        comp_ko = info.get('display_name') or COMP_KO.get(comp, comp)
 
         if info['last_replacement'] is None:
             lines.append(f"• {comp_ko}: 이력 없음")

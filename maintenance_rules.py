@@ -1,7 +1,7 @@
 """
 정비 유형 판정 규칙 — 단일 출처.
 
-`evidence_package.py`, `manager_app.py`, `build_ontology.py`가 모두 이 모듈을 호출한다.
+`evidence_package.py`, `manager_app.py`가 이 모듈을 호출한다.
 같은 규칙을 각자 구현하면 경계 조건이 갈리고, 실제로 갈렸던 적이 있다.
 
 결정 002(필드 단위 authoritative source 지정) 원칙을 판정 규칙에도 적용한 것.
