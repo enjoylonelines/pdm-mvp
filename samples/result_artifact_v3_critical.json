@@ -1,6 +1,6 @@
 {
   "_source": "v3 result_artifact.jsonl — CMP-S03-L03-01, 2026-08-29T23:00:00+09:00",
-  "_dataset_version": "canonical-ai4i-physics-v3.0",
+  "_dataset_version": "canonical-ai4i-physics-v3.1",
   "subject": {
     "equipment_id": "CMP-S03-L03-01",
     "asset_type": "compressor",
@@ -14,7 +14,7 @@
     "score": 0.824661,
     "confidence": 0.649322,
     "predicted_failure_type": "failure_risk",
-    "basis": "independent-logreg-v3.0"
+    "basis": "independent-logreg-v3.1"
   },
   "top_factors": [
     {
@@ -54,7 +54,7 @@
           "basis": {
             "window_rows_for_sensor": 144,
             "relative_vibration_z": null,
-            "reference": "canonical-ai4i-physics-v3.0 compressor_sensor_observation"
+            "reference": "canonical-ai4i-physics-v3.1 compressor_sensor_observation"
           }
         },
         "rotation_raw": {
@@ -63,7 +63,7 @@
           "basis": {
             "window_rows_for_sensor": 144,
             "relative_vibration_z": null,
-            "reference": "canonical-ai4i-physics-v3.0 compressor_sensor_observation"
+            "reference": "canonical-ai4i-physics-v3.1 compressor_sensor_observation"
           }
         },
         "pressure_raw": {
@@ -72,7 +72,7 @@
           "basis": {
             "window_rows_for_sensor": 144,
             "relative_vibration_z": null,
-            "reference": "canonical-ai4i-physics-v3.0 compressor_sensor_observation"
+            "reference": "canonical-ai4i-physics-v3.1 compressor_sensor_observation"
           }
         },
         "vibration_raw": {
@@ -81,7 +81,7 @@
           "basis": {
             "window_rows_for_sensor": 144,
             "relative_vibration_z": 0.6828,
-            "reference": "canonical-ai4i-physics-v3.0 compressor_sensor_observation"
+            "reference": "canonical-ai4i-physics-v3.1 compressor_sensor_observation"
           }
         }
       }
@@ -95,8 +95,8 @@
     }
   ],
   "model": {
-    "version": "independent-logreg-v3.0",
-    "dataset_version": "canonical-ai4i-physics-v3.0",
+    "version": "independent-logreg-v3.1",
+    "dataset_version": "canonical-ai4i-physics-v3.1",
     "prediction_task": "binary_failure_within_horizon"
   },
   "lineage": {
@@ -104,8 +104,8 @@
     "artifact_type": "predictive_maintenance_result",
     "schema_version": "result-artifact-v1.0",
     "generated_at": "2026-08-04T08:28:06.044226+00:00",
-    "dataset_version": "canonical-ai4i-physics-v3.0",
-    "model_version": "independent-logreg-v3.0",
+    "dataset_version": "canonical-ai4i-physics-v3.1",
+    "model_version": "independent-logreg-v3.1",
     "prediction_id": "CMP-S03-L03-01#2026-08-29T23:00:00+09:00",
     "data_sources": [
       "compressor_sensor_observation.csv",

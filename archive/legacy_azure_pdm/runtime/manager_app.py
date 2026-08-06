@@ -489,6 +489,10 @@ def render_situation(pkg: dict, candidates: list) -> None:
                 f"**24시간 안에 실제 고장으로 이어진 경우: {rate:.2f}%**"
             )
             st.caption(policy.grade_failure_rate_detail(top_grade))
+            # 알람만 보면 절반을 놓친다 — 확인 범위를 함께 알린다
+            note = policy.grade_capture_note(top_grade)
+            if note:
+                st.caption(note)
         else:
             st.caption(policy.grade_failure_rate_note(top_grade))
     else:
@@ -571,13 +575,19 @@ def render_trend(trend_df: pd.DataFrame | None, ts_str: str) -> None:
 
             # 알람 기준선 (1.0) — 빨간 점선
             alarm_ref = (
-                alt.Chart(pd.DataFrame({'y': [1.0], 'text': ['알람 기준 (고장 비율 약 24%)']}))
+                alt.Chart(pd.DataFrame({
+                    'y': [policy.GRADE_ALARM_THRESHOLD],
+                    'text': [policy.grade_threshold_caption(policy.ALARM)],
+                }))
                 .mark_rule(strokeDash=[5, 3], color='#e53e3e', strokeWidth=1.5)
                 .encode(y='y:Q', tooltip=alt.Tooltip('text:N'))
             )
             # 관찰 기준선 (0.8) — 주황 점선
             watch_ref = (
-                alt.Chart(pd.DataFrame({'y': [0.8], 'text': ['관찰 기준 (고장 비율 약 16%)']}))
+                alt.Chart(pd.DataFrame({
+                    'y': [policy.GRADE_WATCH_THRESHOLD],
+                    'text': [policy.grade_threshold_caption(policy.WATCH)],
+                }))
                 .mark_rule(strokeDash=[5, 3], color='#d97706', strokeWidth=1.5)
                 .encode(y='y:Q', tooltip=alt.Tooltip('text:N'))
             )
@@ -657,19 +667,25 @@ def render_certainty(pkg: dict) -> None:
         _basis_expander("판단 근거", basis_items, paths)
 
     elif no_prior and hyps:
-        st.warning(
-            "**직전 24시간 경고 없음** — 판단 근거가 제한적입니다.  \n"
-            "전체 고장 761건 중 이 패턴(경고 없이 이상 신호만 있는 상태)은  \n"
-            "**15건(2.0%)**에서만 관찰됐습니다.  \n"
-            "자동 알림 기준에 해당하지 않는 상태입니다.",
-            icon="ℹ️",
-        )
+        # 희소성 수치는 데이터셋 종속. 현재 데이터셋에서 측정되지 않았으면 생략한다.
+        rarity = policy.prior_error_absent_note()
+        msg = ["**직전 24시간 경고 없음** — 판단 근거가 제한적입니다.  "]
+        if rarity:
+            msg.append(rarity + "  ")
+        msg.append("자동 알림 기준에 해당하지 않는 상태입니다.")
+        st.warning("\n".join(msg), icon="ℹ️")
+
+        basis = [('직전 24시간 경고 건수', '0건')]
+        if rarity:
+            d = policy.PRIOR_ERROR_ABSENT
+            basis.append((
+                '경고 없는 고장 사례',
+                f"전체 {d['failures_total']:,}건 중 "
+                f"{d['without_prior_error']:,}건 ({d['pct']:.1f}%)",
+            ))
         _basis_expander(
             "판단 근거",
-            [
-                ('직전 24시간 경고 건수', '0건'),
-                ('경고 없는 고장 사례', '전체 761건 중 15건 (2.0%)'),
-            ],
+            basis,
             ['error_context.count', 'status_flags.no_prior_error', 'component_hypotheses'],
         )
     else:
@@ -726,7 +742,12 @@ def render_delay(
 ) -> None:
     _section_card(4, "미루면 뭐가 나빠지는가 — 과거 이력 기반 비교")
 
-    maint_ctx = pkg['maintenance_context']
+    # 값이 dict 인 것만 실제 정비 항목이다. 원본 파일이 없으면 어댑터가 같은
+    # 자리에 사유 문자열을 넣는다. (report_generator._maintenance_entries 와 동일)
+    maint_ctx = {
+        k: v for k, v in (pkg.get('maintenance_context') or {}).items()
+        if isinstance(v, dict)
+    }
     mid       = pkg['machine_id']
 
     # 이상 등급이 있는 부품 우선, 없으면 교체 이력이 있는 부품
@@ -737,7 +758,7 @@ def render_delay(
     basis_items: list[tuple[str, str]] = []
     paths: list[str] = []
 
-    for comp in priority[:2]:
+    for comp in priority[:policy.MAX_COMPONENTS_DETAILED]:
         comp_name = COMP_DISPLAY.get(comp, comp)
         info      = maint_ctx.get(comp, {})
         days      = info.get('days_elapsed')
@@ -806,7 +827,7 @@ def render_delay(
 
     # ── 계통 단위 (건수 5건 이상인 경우만) ──────────────────────────────
     shown_comp_chart = False
-    for comp in priority[:2]:
+    for comp in priority[:policy.MAX_COMPONENTS_DETAILED]:
         comp_disp = COMP_DISPLAY.get(comp, comp)
         comp_cnt  = equip_counts['by_machine_comp'].get(
             (mid, comp), {'preventive': 0, 'reactive': 0}
@@ -882,9 +903,13 @@ def render_target(candidates: list) -> None:
             unsafe_allow_html=True,
         )
 
+    _summary = policy.grade_rate_summary()
     st.caption(
         "등급 안내 — 같은 상태의 과거 사례에서 24시간 안에 고장으로 이어진 경우:  \n"
-        "즉시 교체 필요 약 24% / 관찰 필요 약 16% / 정상 약 0.01%"
+        + _summary
+        if _summary else
+        "등급 안내 — 이상 신호 크기 순서입니다. "
+        "등급별 실제 고장률은 현재 데이터셋에서 측정되지 않았습니다."
     )
     st.caption("센서 상세, 편차 수치는 엔지니어 화면에서 확인하십시오.")
 
@@ -943,10 +968,20 @@ def main() -> None:
         )
         st.markdown("---")
         st.markdown("**이상신호 등급**")
+        def _grade_line(grade: str, position: str) -> str:
+            rate = policy.grade_failure_rate(grade)
+            tail = (
+                f" — 과거 같은 상태에서 24시간 안에 고장 **약 {rate:.1f}%**"
+                if rate is not None else ""
+            )
+            return f"{badge_html(grade)} {position}{tail}"
+
         st.markdown(
-            f"{badge_html('알람')} 기준선 초과 — 과거 같은 상태에서 24시간 안에 고장 **약 24%**  \n"
-            f"{badge_html('관찰')} 기준선 근접 — 과거 같은 상태에서 24시간 안에 고장 **약 16%**  \n"
-            f"{badge_html('정상')} 기준선 이하 — 과거 같은 상태에서 24시간 안에 고장 **약 0.01%**",
+            "  \n".join([
+                _grade_line(policy.ALARM,  '기준선 초과'),
+                _grade_line(policy.WATCH,  '기준선 근접'),
+                _grade_line(policy.NORMAL, '기준선 이하'),
+            ]),
             unsafe_allow_html=True,
         )
         st.caption("같은 등급 안에서 목록 순서가 위험도 순위를 보장하지 않습니다.")
@@ -955,7 +990,8 @@ def main() -> None:
         st.markdown(
             "과거 이력을 바탕으로,  \n"
             "\"이 신호 수준에서 24시간 안에  \n"
-            "고장이 약 24% 발생했다\"는 지점입니다.  \n"
+            f"고장이 약 {policy.GRADE_FAILURE_RATE[policy.ALARM]:.1f}% "
+            "발생했다\"는 지점입니다.  \n"
             "계통마다 신호 크기가 달라 기준선 수치는 다르지만,  \n"
             "기준선에 도달했을 때 고장 비율은  \n"
             "모든 계통이 같게 맞췄습니다."
@@ -1029,7 +1065,7 @@ def main() -> None:
     )
     st.caption(
         "**이상신호 등급**: 센서 편차가 판정 기준선을 넘은 정도 — "
-        "알람(과거 사례 24% 고장) · 관찰(16%) · 정상(0.01%)  \n"
+        + (policy.grade_rate_summary(sep=' · ') or '알람 · 관찰 · 정상') + "  \n"
         "**이상수준 추이**: 최근 24시간의 이상신호 수준이 직전 24시간 대비 "
         f"{TREND_CHANGE_THRESHOLD_PCT}% 이상 올랐으면 '상승 중', 그 이상 내렸으면 '하락 중'  \n"
         "**직전 24시간 경고**: 센서 이상과 별개로 경고 이벤트(error1~5)가 발생했는지 여부"

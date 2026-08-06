@@ -25,15 +25,31 @@ from typing import Optional
 import csv
 from datetime import datetime, timezone, timedelta
 
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+import failure_type_rules  # noqa: E402
+
 DATASET_VERSION = "canonical-ai4i-physics-v3.1"
-MODEL_VERSION   = "independent-logreg-v3.0"
+MODEL_VERSION   = "independent-logreg-v3.1"
 WINDOW_HOURS    = 24
 
-# status_grade → azure-pdm prediction.status 매핑
+# 모델의 4단계 status_grade → 화면 3단계 등급 매핑.
+#
+# 등급별 24시간 내 실제 고장률을 재서 경계를 정했다 (68,208행 · 고장 1,793건).
+#
+#   critical   38.38%  기저 14.6배
+#   warning     2.95%  기저  1.1배
+#   attention   1.05%  기저  0.4배
+#   normal      1.00%  기저  0.4배
+#
+# critical 과 warning 을 함께 alarm 으로 묶으면 14.6배와 1.1배가 한 등급이 되어
+# 알람 고장률이 8.63% 로 희석되고, 밀려난 attention 이 normal 과 구분되지 않는다.
+# 실제로 그런 상태였고 관찰 1.05% 대 정상 1.00% 로 변별력이 사라져 있었다.
+#
+# 아래 매핑에서는 인접 등급 간 격차가 13.0배 / 2.9배로 벌어진다.
 STATUS_MAP = {
     "critical":  "alarm",
-    "warning":   "alarm",
-    "attention": "watch",
+    "warning":   "watch",
+    "attention": "normal",
     "normal":    "normal",
 }
 
@@ -351,12 +367,53 @@ def _load_maintenance_context(
 # 핵심 변환 함수
 # ---------------------------------------------------------------------------
 
+_CYCLE_CACHE: dict[str, dict[str, list[tuple[str, str]]]] = {}
+
+
+def _load_product_type(
+    cycle_csv: Path, asset_id: str, observed_at: str
+) -> Optional[str]:
+    """관측 시각 기준 직전 생산 사이클의 제품군.
+
+    과부하(OSF) 임계가 제품군마다 다르다(L 11000 / M 12000 / H 13000).
+    모르면 `None` 을 돌려주고, 규칙 모듈이 중간 등급으로 가정한다.
+    가정 여부는 `threshold.product_type_assumed` 에 표시된다.
+    """
+    key = str(cycle_csv)
+    if key not in _CYCLE_CACHE:
+        index: dict[str, list[tuple[str, str]]] = {}
+        try:
+            with open(cycle_csv, newline="", encoding="utf-8") as fh:
+                for row in csv.DictReader(fh):
+                    aid = row.get("cnc_asset_id")
+                    if not aid:
+                        continue
+                    index.setdefault(aid, []).append(
+                        (row.get("cycle_started_at", ""), row.get("product_type", ""))
+                    )
+        except OSError:
+            index = {}
+        for aid in index:
+            index[aid].sort(key=lambda t: t[0])
+        _CYCLE_CACHE[key] = index
+
+    rows = _CYCLE_CACHE[key].get(asset_id) or []
+    latest = None
+    for started_at, product_type in rows:
+        if started_at <= observed_at:
+            latest = product_type
+        else:
+            break
+    return latest or None
+
+
 def result_artifact_to_evidence_package(
     artifact: dict,
     *,
     sensor_csv: Optional[Path] = None,
     maint_csv:  Optional[Path] = None,
     asset_master: Optional[dict] = None,
+    cycle_csv: Optional[Path] = None,
 ) -> dict:
     """
     v3 Result Artifact 1건 → azure-pdm Evidence Package 형태.
@@ -373,6 +430,7 @@ def result_artifact_to_evidence_package(
 
     # ── sensor_evidence ───────────────────────────────────────────────────────
     # 자산 유형이 센서 스키마를 결정한다. 압축기와 CNC는 공통 센서 필드가 없다.
+    sensor_rows: list[dict] = []
     if sensor_csv and asset_type in SENSOR_COLS_BY_TYPE:
         sensor_rows = _load_sensor_window(sensor_csv, asset_id, observed_at)
         sensor_evidence = _build_sensor_evidence_from_window(sensor_rows, asset_type)
@@ -409,6 +467,32 @@ def result_artifact_to_evidence_package(
                 "explanation_method": tf.get("explanation_method"),
                 "association": f"feature_anomaly_risk_up_candidate_rank{tf.get('rank','')}",
             })
+
+    # ── failure_type_candidates (측정값 → 규칙 판정) ──────────────────────────
+    #
+    # 모델은 "위험 있음/없음" 2값만 준다. 어느 유형인지는 모델이 아니라
+    # 측정값에 대한 물리 조건으로 판정한다. 학습하지 않는다.
+    # 근거: failure_type_rules 모듈 주석.
+    if sensor_rows:
+        latest_row = max(sensor_rows, key=lambda r: r.get("observed_at", ""))
+        product_type = (
+            _load_product_type(cycle_csv, asset_id, observed_at) if cycle_csv else None
+        )
+        failure_type = failure_type_rules.evaluate(
+            latest_row, asset_type=asset_type, product_type=product_type
+        )
+        failure_type["basis"] = {
+            "observed_at": latest_row.get("observed_at"),
+            "source": "canonical sensor observation (창 내 최신 관측)",
+            "method": "rule_based_physical_condition",
+            "not_model_output": True,
+        }
+    else:
+        failure_type = {
+            "available": False,
+            "reason": "센서 관측이 없어 유형을 판정할 수 없습니다",
+            "candidates": [], "matched": [], "conclusion": None,
+        }
 
     # ── maintenance_context ───────────────────────────────────────────────────
     maint_ctx = {}
@@ -494,6 +578,8 @@ def result_artifact_to_evidence_package(
         "component_hypotheses": hypotheses,
         # ── top_factors 원본 (모든 방향 포함) ──
         "top_factors": artifact.get("top_factors", []),
+        # ── 고장 유형 후보 (규칙 판정. 모델 출력 아님) ──
+        "failure_type_candidates": failure_type,
         # ── 정비 문맥 ──
         "maintenance_context": maint_ctx,
         # ── 권고 행동 ──
@@ -535,6 +621,7 @@ def build_evidence_packages(
     """
     ds = v3_path / "canonical" / "dataset"
     maint_csv = ds / "maintenance_event.csv"
+    cycle_csv = ds / "cnc_production_cycle.csv"   # 제품군 → 과부하 임계
     asset_master = _load_asset_master(ds / "asset_master.csv")
 
     artifacts = load_all_result_artifacts(v3_path)
@@ -555,6 +642,7 @@ def build_evidence_packages(
             sensor_csv=sensor_csv if sensor_csv and sensor_csv.exists() else None,
             maint_csv=maint_csv if maint_csv.exists() else None,
             asset_master=asset_master or None,
+            cycle_csv=cycle_csv if cycle_csv.exists() else None,
         )
         packages.append(ep)
     return packages

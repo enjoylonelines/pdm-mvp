@@ -1,8 +1,10 @@
 # 모델 캐시 (대용량 pkl)
 cache/*.pkl
+archive/dev_artifacts/
 
 # 대용량 원본 데이터
 archive/PdM_telemetry.csv
+archive/legacy_azure_pdm/data/PdM_telemetry.csv
 
 # Claude 로컬 설정
 .claude/

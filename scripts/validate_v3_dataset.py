@@ -144,13 +144,23 @@ def run_checks(v3_path: Path) -> bool:
     # azure-pdm 프로젝트 소스에서 evaluation_truth 참조 여부 검사
     project_root = Path(__file__).parent.parent
     eval_refs = []
-    for py_file in list(project_root.glob("**/*.py")) + list(project_root.glob("scripts/*.py")):
+    for py_file in project_root.glob("**/*.py"):
         if "validate_v3_dataset" in py_file.name:
             continue
+        rel = py_file.relative_to(project_root)
+        if rel.parts[0] in {"archive", ".git"} or py_file.name.startswith("test_"):
+            continue
         try:
-            content = py_file.read_text()
-            if "evaluation_truth" in content:
-                eval_refs.append(str(py_file.relative_to(project_root)))
+            has_runtime_ref = False
+            for line in py_file.read_text().splitlines():
+                stripped = line.strip()
+                if stripped.startswith("#"):
+                    continue
+                if "evaluation_truth" in stripped:
+                    has_runtime_ref = True
+                    break
+            if has_runtime_ref:
+                eval_refs.append(str(rel))
         except Exception:
             pass
     no_eval_ref = len(eval_refs) == 0

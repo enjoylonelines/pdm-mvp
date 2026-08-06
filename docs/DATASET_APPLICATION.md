@@ -12,7 +12,7 @@
 | 경로 | `$PDM_CANONICAL_PATH` |
 | 핵심 입력 파일 | `canonical/model_outputs/result_artifact.jsonl` |
 | 레코드 수 | 100건 (compressor 20 / cnc 80) |
-| 모델 버전 | `independent-logreg-v3.0` |
+| 모델 버전 | `independent-logreg-v3.1` |
 | 스키마 버전 | `result-artifact-v1.0` |
 | 검증 상태 | 전체 PASS (`scripts/validate_v3_dataset.py`) |
 
@@ -26,9 +26,11 @@
 |----------|----------|------|
 | **Result Artifact 로드** | `result_artifact.jsonl` 전체 파싱 | `scripts/load_v3_result_artifacts.py` |
 | **Evidence Package 변환** | `result_artifact_to_evidence_package()` | `scripts/load_v3_result_artifacts.py` |
-| **센서 창 조인** | `compressor_sensor_observation.csv` 24h 필터 | `scripts/load_v3_result_artifacts.py` |
+| **센서 창 조인** | 자산 유형별 센서 CSV 24h 필터 (`compressor_sensor_observation.csv`, `cnc_sensor_observation.csv`) | `scripts/load_v3_result_artifacts.py` |
 | **정비 이력 조인** | `maintenance_event.csv` 최근 이벤트 조회 | `scripts/load_v3_result_artifacts.py` |
-| **status_grade 매핑** | critical/warning→alarm, attention→watch, normal→normal | `scripts/load_v3_result_artifacts.py` |
+| **동종 장비 비교** | `asset_master.csv` 기반 같은 cell/site 내 같은 자산 유형 비교 | `scripts/load_v3_result_artifacts.py` |
+| **고장 유형 후보** | 창 내 최신 센서값을 규칙으로 판정 (`evaluation_truth` 미사용) | `failure_type_rules.py` |
+| **status_grade 매핑** | critical→alarm, warning→watch, attention/normal→normal | `scripts/load_v3_result_artifacts.py` |
 | **샘플 JSON (critical)** | CMP-S03-L03-01, probability=0.825, 센서 144행 | `samples/evidence_package_v3_critical.json` |
 | **샘플 JSON (Result Artifact critical)** | 동일 케이스, Result Artifact 스키마 형태 | `samples/result_artifact_v3_critical.json` |
 | **샘플 JSON (normal)** | CMP-S01-L04-01, probability=0.101 | `samples/result_artifact_v3_normal.json` |
@@ -38,15 +40,12 @@
 
 | 구성 요소 | 현황 | 다음 작업 |
 |----------|------|----------|
-| **CNC 센서 조인** | cnc_sensor_observation.csv 미연결 (어댑터가 compressor만 처리) | CNC 장비 대상 sensor_evidence 확장 |
 | **prediction_snapshot.jsonl** | 로드 미연결 | 장비별 스냅샷 타임라인 시각화 연결 |
 | **prediction_factor.jsonl** | 로드 미연결 | top_factors와 feature-level 기여도 통합 |
-| **asset_relation.csv** | 장비 간 관계 미연결 | peer_comparison 구조 확장 시 필요 |
-| **대시보드 (manager_app.py)** | 아직 v3 데이터 미연결 | Result Artifact → Streamlit 화면 연결 |
-| **report_generator.py** | azure-pdm 구조 기반, v3 필드 미지원 | v3 Evidence Package 구조 기반으로 리포트 블록 수정 |
+| **asset_relation.csv** | 장비 간 공급 관계 미연결 | upstream/downstream 영향 표시가 필요할 때 연결 |
+| **대시보드/API** | 핵심 저장소 범위 밖 | 별도 프로토타입에서 Result Artifact/Evidence Package 소비 |
 | **LLM 리포트 레이어** | 미구현 | Evidence Package → 역할별 문장 변환 프롬프트 설계 |
 | **API 엔드포인트** | 미구현 | Result Artifact를 JSON으로 제공하는 API 초안 |
-| **peer_comparison** | v3에는 peer 비교 구조 없음 | asset_master.csv 기반 동급 장비 비교 설계 필요 |
 | **error_context** | azure-pdm 전용 구조 (errorID 기반), v3에 없음 | v3 이벤트 로그 연결 방안 검토 |
 | `recommended_decision` | 아직 미정 | 팀 합의 필요 |
 | `lineage.evidence_id` 고유성 | artifact_id 재사용 중 | uuid4 또는 hash 생성 정책 결정 |
@@ -82,7 +81,7 @@ recommended_action
   priority               str   "urgent" | "medium" | "routine"
 provenance
   dataset_version        str   "canonical-ai4i-physics-v3.1"
-  model_version          str   "independent-logreg-v3.0"
+  model_version          str   "independent-logreg-v3.1"
   prediction_id          str
   source_type            str
   canonical_source_mutated bool
@@ -92,10 +91,10 @@ provenance
 
 | status_grade | 건수 | 매핑 (azure-pdm prediction.status) |
 |-------------|------|--------------------------------------|
-| critical | 3 | alarm |
-| warning | 12 | alarm |
-| attention | 53 | watch |
-| normal | 32 | normal |
+| critical | 2 | alarm |
+| warning | 17 | watch |
+| attention | 39 | normal |
+| normal | 42 | normal |
 
 ---
 
